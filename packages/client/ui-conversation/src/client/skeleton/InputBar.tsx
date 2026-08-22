@@ -355,19 +355,22 @@ export function InputBar({
     const el = inputRef.current
     if (el === null || keyboard === undefined) return
     keyboard.setDraft(text)
-    restoreCaret(el, text.length)
+    // Synchronous caret placement — the rAF-based restore serves paste paths;
+    // history walking fires on key repeat and must stay cheap (no layout read).
+    el.setSelectionRange(text.length, text.length)
   }
 
   const navigateHistory = (dir: 'up' | 'down'): boolean => {
     const el = inputRef.current
     if (el === null) return false
-    // Only walk the history from an empty draft or with the caret at the
-    // start, so the arrows keep their caret-movement meaning inside a draft.
-    const caretAtStart = (el.selectionStart ?? 0) === 0
-    if (draft !== '' && !caretAtStart) return false
     if (historyRef.current.length === 0) return false
     if (dir === 'up') {
+      // Entering the history walk is only allowed from an empty draft or with
+      // the caret at the start, so the arrows keep their caret-movement
+      // meaning inside a draft. Once walking, both directions move freely.
       if (historyIndexRef.current === -1) {
+        const caretAtStart = (el.selectionStart ?? 0) === 0
+        if (draft !== '' && !caretAtStart) return false
         liveDraftRef.current = draft
         historyIndexRef.current = 0
       } else if (historyIndexRef.current < historyRef.current.length - 1) {
