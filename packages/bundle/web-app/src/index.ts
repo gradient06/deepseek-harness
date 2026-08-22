@@ -15,6 +15,7 @@ import { spawn, type ChildProcess } from 'node:child_process'
 import { createRequire } from 'node:module'
 import { networkInterfaces } from 'node:os'
 import { fileURLToPath } from 'node:url'
+import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import { addHarnessSourceSection } from '@deepseek-ai/dsh-app-boot'
@@ -37,6 +38,71 @@ const WEB_RUNTIME_SERVICE = 'webRuntime'
 
 /** Services required before the web runtime can mount. */
 export const inject = ['webServer']
+
+const OCR_MAX_BYTES = 10 * 1024 * 1024
+
+/**
+ * POST /api/ocr — extract text from a pasted image via the Mistral OCR API
+ * (same MISTRAL_API_KEY as the Mistral provider). Custom evolution: the
+ * current model has no vision, so the composer OCRs the image client-side and
+ * injects the recognized text into the prompt.
+ */
+async function handleOcr(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  const writeJson = (status: number, body: unknown): void => {
+    res.writeHead(status, { 'content-type': 'application/json' })
+    res.end(JSON.stringify(body))
+  }
+  if (req.method !== 'POST') {
+    res.writeHead(405)
+    res.end()
+    return
+  }
+  const chunks: Buffer[] = []
+  let size = 0
+  try {
+    for await (const chunk of req) {
+      const buf = chunk as Buffer
+      size += buf.length
+      if (size > OCR_MAX_BYTES) {
+        writeJson(413, { error: 'image trop volumineuse' })
+        return
+      }
+      chunks.push(buf)
+    }
+  } catch {
+    writeJson(400, { error: 'lecture du corps impossible' })
+    return
+  }
+  const mime = (req.headers['content-type'] as string | undefined) ?? 'application/octet-stream'
+  const key = process.env.MISTRAL_API_KEY
+  if (key === undefined || key === '') {
+    writeJson(500, { error: 'MISTRAL_API_KEY non configurée' })
+    return
+  }
+  const b64 = Buffer.concat(chunks).toString('base64')
+  try {
+    const response = await fetch('https://api.mistral.ai/v1/ocr', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${key}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'mistral-ocr-latest',
+        document: { type: 'image_url', image_url: `data:${mime};base64,${b64}` },
+      }),
+    })
+    if (!response.ok) {
+      writeJson(502, { error: `Mistral OCR HTTP ${response.status}` })
+      return
+    }
+    const data = (await response.json()) as { pages?: { markdown?: string }[] }
+    const text = (data.pages ?? []).map(page => page.markdown ?? '').join('\n\n').trim()
+    writeJson(200, { text })
+  } catch (error) {
+    writeJson(500, { error: error instanceof Error ? error.message : String(error) })
+  }
+}
 
 /** Plugin config: composed deployment settings plus per-invocation command-line values. */
 export interface Config {
@@ -231,6 +297,13 @@ export function apply(ctx: Context, config: Config): void {
   // Release dependent rows only after bind-dependent trust has been sampled once.
   ctx.provide(WEB_RUNTIME_SERVICE, runtime)
   ctx.plugin(FrontendStatic, { distIndex: internals.resolveDistIndex() })
+  // Mistral OCR endpoint for pasted images (custom evolution — the composer
+  // POSTs the image and injects the recognized text into the prompt).
+  ctx.effect(() => ctx.webServer.register({
+    kind: 'exact',
+    path: '/api/ocr',
+    handler: async (req, res) => { await handleOcr(req, res) },
+  }), 'web-app: /api/ocr (Mistral OCR)')
   if (config.surfaceContext) {
     ctx.inject(['systemPrompt'], (promptCtx) => {
       addHarnessSourceSection(promptCtx, SOURCE_ROOT)

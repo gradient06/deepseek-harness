@@ -599,6 +599,39 @@ export function InputBar({
 
   const canAcceptDrop = !locked && !machineBusy && addImages !== undefined
 
+  // Custom evolution: OCR the first pasted image through the host's /api/ocr
+  // (Mistral OCR) and append the recognized text to the draft — the current
+  // model has no vision, so the image content travels as text.
+  const ocrAttachment = useCallback(async (): Promise<void> => {
+    const file = attachments[0]?.file
+    const el = inputRef.current
+    if (file === undefined || keyboard === undefined || el === null) return
+    try {
+      const resp = await fetch('/api/ocr', {
+        method: 'POST',
+        headers: { 'Content-Type': file.type || 'application/octet-stream' },
+        body: file,
+      })
+      if (!resp.ok) {
+        const data = await resp.json().catch(() => null) as { error?: string } | null
+        throw new Error(data?.error ?? `OCR HTTP ${resp.status}`)
+      }
+      const data = await resp.json() as { text?: string }
+      const text = (data.text ?? '').trim()
+      if (text === '') {
+        showToast('OCR : aucun texte détecté dans l\'image')
+        return
+      }
+      const block = `[📸 Image OCR — contenu :]\n${text}`
+      const next = draft === '' ? block : `${draft}\n\n${block}`
+      keyboard.setDraft(next)
+      el.setSelectionRange(next.length, next.length)
+      showToast('OCR : texte ajouté au prompt')
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'OCR : erreur')
+    }
+  }, [attachments, draft, keyboard, showToast])
+
   const onSelect = (e: React.SyntheticEvent<HTMLTextAreaElement>): void => {
     // Any caret/selection gesture ends a live paste attempt (the machine
     // cannot observe DOM selection). Cheap no-op when none is live.
@@ -849,6 +882,23 @@ export function InputBar({
                 <IconPlusOutline16 size={14} />
               </button>
             </Tooltip>
+            {attachments.length > 0 && (
+              <Tooltip label="OCR l'image (Mistral)" side="top" delayMs={500}>
+                <button
+                  type="button"
+                  className={css.add}
+                  aria-label="OCR l'image"
+                  disabled={locked || machineBusy}
+                  onMouseDown={keepFocus}
+                  onClick={() => { void ocrAttachment() }}
+                >
+                  <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden>
+                    <rect x="2" y="2" width="12" height="12" rx="2.5" fill="none" stroke="currentColor" strokeWidth="1.5" />
+                    <path d="M5 5h2v2H5zm4 0h2v2H9zM5 9h2v2H5zm4 0h2v2H9z" fill="currentColor" />
+                  </svg>
+                </button>
+              </Tooltip>
+            )}
             <div className={css.modes}>
               {accessSelect}
               {renderSlot('conversation.input.plan', { locked })}
