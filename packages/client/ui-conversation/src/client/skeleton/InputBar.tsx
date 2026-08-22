@@ -25,6 +25,7 @@ import type { ComposerBarProps } from '../contract/slots.ts'
 import { deriveDecorations } from '../input/decorations.ts'
 import type { DraftDecorations } from '../input/decorations.ts'
 import type { EditRange } from '../input/contract.ts'
+import { readPromptHistory, recordPromptHistory } from '../input/prompt-history.ts'
 import { attachmentErrorText, imageSizeText } from '../image-labels.ts'
 import { ReferenceIcon } from '../reference/ReferenceIcon.tsx'
 import { ContextMeter } from './ContextMeter.tsx'
@@ -139,6 +140,11 @@ export function InputBar({
   const cardRef = useRef<HTMLDivElement | null>(null)
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const mirrorRef = useRef<HTMLDivElement | null>(null)
+  // Shell-like prompt history: ArrowUp/ArrowDown walk submitted prompts; the
+  // live draft is restored when walking back past the newest entry.
+  const historyRef = useRef<string[]>(readPromptHistory())
+  const historyIndexRef = useRef(-1) // -1 = the live draft (not browsing)
+  const liveDraftRef = useRef('')
   const safari = useMemo(() => isSafariBrowser(navigator), [])
   const safariNativeShrinkRef = useRef(false)
   // IME guard: composition Enter picks a candidate, it must not send. The ref outlives renders;
@@ -345,6 +351,50 @@ export function InputBar({
     return () => { el.removeEventListener('beforeinput', onBeforeInput) }
   }, [])
 
+  const applyHistoryDraft = (text: string): void => {
+    const el = inputRef.current
+    if (el === null || keyboard === undefined) return
+    keyboard.setDraft(text)
+    restoreCaret(el, text.length)
+  }
+
+  const navigateHistory = (dir: 'up' | 'down'): boolean => {
+    const el = inputRef.current
+    if (el === null) return false
+    // Only walk the history from an empty draft or with the caret at the
+    // start, so the arrows keep their caret-movement meaning inside a draft.
+    const caretAtStart = (el.selectionStart ?? 0) === 0
+    if (draft !== '' && !caretAtStart) return false
+    if (historyRef.current.length === 0) return false
+    if (dir === 'up') {
+      if (historyIndexRef.current === -1) {
+        liveDraftRef.current = draft
+        historyIndexRef.current = 0
+      } else if (historyIndexRef.current < historyRef.current.length - 1) {
+        historyIndexRef.current += 1
+      } else {
+        return false // already at the oldest entry
+      }
+    } else {
+      if (historyIndexRef.current === -1) return false
+      historyIndexRef.current -= 1
+      if (historyIndexRef.current === -1) {
+        // walked back past the newest entry: restore the live draft
+        applyHistoryDraft(liveDraftRef.current)
+        return true
+      }
+    }
+    const entry = historyRef.current[historyIndexRef.current]
+    if (entry === undefined) return false // index guarded by the branches above
+    applyHistoryDraft(entry)
+    return true
+  }
+
+  const rememberPrompt = (text: string): void => {
+    historyRef.current = recordPromptHistory(text)
+    historyIndexRef.current = -1
+  }
+
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>): void => {
     if (workspaceTrigger) {
       if (e.key === 'Enter' || e.key === ' ') {
@@ -381,7 +431,15 @@ export function InputBar({
       }
     }
     if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
-      if (keyboard.arbitrate(e.key === 'ArrowUp' ? 'up' : 'down', composing) === 'consumed') e.preventDefault()
+      if (keyboard.arbitrate(e.key === 'ArrowUp' ? 'up' : 'down', composing) === 'consumed') {
+        e.preventDefault()
+        return
+      }
+      // The machine did not claim the arrow: shell-like prompt history walk.
+      if (!composing && !locked && !machineBusy
+        && navigateHistory(e.key === 'ArrowUp' ? 'up' : 'down')) {
+        e.preventDefault()
+      }
       return
     }
     if (e.key === 'Escape') {
@@ -428,6 +486,7 @@ export function InputBar({
       keyboard.steerQueue()
       return
     }
+    rememberPrompt(draft)
     keyboard.submit(resolveSubmitMode(
       running,
       accelerated ? 'accelerated' : 'enter',
@@ -441,6 +500,7 @@ export function InputBar({
     const next = e.target.value
     const pending = pendingEditRef.current
     pendingEditRef.current = null
+    historyIndexRef.current = -1 // typing leaves the history walk
     safariNativeShrinkRef.current = safari && next.length < draft.length
     keyboard.setDraft(next, editRangeOf(pending, draft.length, next.length))
     // selectionStart is number|null in lib.dom; the type-aware lint program narrows it.
@@ -570,7 +630,10 @@ export function InputBar({
     }
     if (inputActions === undefined) return // absent machine: the button is disabled
     /* v8 ignore next -- defensive: the primary button is disabled while empty||disabled, so a click cannot reach the false arm. */
-    if (!empty && !disabled && !machineBusy) inputActions.submit()
+    if (!empty && !disabled && !machineBusy) {
+      rememberPrompt(draft)
+      inputActions.submit()
+    }
   }
 
   // The Access seat: the projection-fed permission chip (renders nothing
