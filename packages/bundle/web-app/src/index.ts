@@ -12,8 +12,9 @@
  */
 
 import { spawn, type ChildProcess } from 'node:child_process'
+import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
-import { networkInterfaces } from 'node:os'
+import { homedir, networkInterfaces } from 'node:os'
 import { fileURLToPath } from 'node:url'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { Context } from '@deepseek-ai/cordis'
@@ -40,6 +41,16 @@ const WEB_RUNTIME_SERVICE = 'webRuntime'
 export const inject = ['webServer']
 
 const OCR_MAX_BYTES = 10 * 1024 * 1024
+
+/** Local key file fallback so the OCR route survives server restarts launched
+ * from shells that do not export MISTRAL_API_KEY (e.g. ~/.config/dsh/mistral-key). */
+function readMistralKeyFromFile(): string | undefined {
+  try {
+    return readFileSync(`${homedir()}/.config/dsh/mistral-key`, 'utf8').trim() || undefined
+  } catch {
+    return undefined
+  }
+}
 
 /**
  * POST /api/ocr — extract text from a pasted image via the Mistral OCR API
@@ -74,7 +85,7 @@ async function handleOcr(req: IncomingMessage, res: ServerResponse): Promise<voi
     return
   }
   const mime = (req.headers['content-type'] as string | undefined) ?? 'application/octet-stream'
-  const key = process.env.MISTRAL_API_KEY
+  const key = process.env.MISTRAL_API_KEY ?? readMistralKeyFromFile()
   if (key === undefined || key === '') {
     writeJson(500, { error: 'MISTRAL_API_KEY non configurée' })
     return
