@@ -40,3 +40,22 @@ export const en = {
   'plan.decline': 'Refuse',
   'plan.discuss': 'Chat about it',
 } satisfies Record<QuestionKey, string>
+
+/** French dictionary, checked complete against the zh key set. */
+export const fr = {
+  'error.incomplete': 'Veuillez d’abord terminer cette question.',
+  'error.unanswered': 'Veuillez sélectionner une option ou saisir une réponse personnalisée.',
+  'nav.prev': 'Question précédente',
+  'nav.next': 'Question suivante',
+  'nav.minimize': 'Réduire la carte de question',
+  'nav.maximize': 'Déplier la carte de question',
+  'nav.cancel': 'Abandonner toutes les questions',
+  'option.recommended': 'Recommandé',
+  'custom.placeholder': 'Saisissez votre réponse',
+  'action.skip': 'Passer cette question',
+  'action.next': 'Suivant',
+  'plan.header': 'Plan à examiner',
+  'plan.approve': 'Approuver',
+  'plan.decline': 'Refuser',
+  'plan.discuss': 'En discuter dans le chat',
+} satisfies Record<QuestionKey, string>

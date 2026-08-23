@@ -141,6 +141,72 @@ export const zh: Record<AgentPresetSettingsKey, string> = {
   deleting: '正在删除…',
 }
 
+/** French copy. */
+export const fr: Record<AgentPresetSettingsKey, string> = {
+  title: 'Présélection d’agent',
+  description: 'S’applique aux sessions démarrées à partir de maintenant. Les sessions en cours conservent la présélection avec laquelle elles ont commencé.',
+  loading: 'Chargement des présélections…',
+  error: 'Impossible de charger les présélections d’agent.',
+  userTrust: 'Personnalisée',
+  seatHint: 'Présélection d’agent pour la session que vous allez démarrer',
+  headerHint: 'La présélection d’agent de cette session, fixée à son démarrage',
+  nav: 'Présélections d’agent',
+  sectionIntro:
+    'Une présélection est la composition de plugins exécutée par l’agent d’une session — ses outils, son invite et ses capacités. '
+    + 'Dupliquez-en une existante et personnalisez-la, ou laissez l’agent en rédiger une pour vous en mode Créateur.',
+  builtIn: 'Intégrée',
+  setDefault: 'Définir par défaut',
+  view: 'Voir',
+  presetStandardName: 'Mode standard',
+  presetStandardDescription:
+    'Agent de codage complet avec édition de fichiers, terminal, recherche de fichiers et web, compétences, planification, objectifs, sous-agents et workflows.',
+  presetCodeName: 'Mode PTC',
+  presetCodeDescription:
+    'Toutes les capacités du mode standard, avec des outils exposés via le SDK Code Mode pour que le modèle puisse combiner des opérations multi-étapes dans un seul programme TypeScript.',
+  presetMinimalName: 'Mode minimal',
+  presetMinimalDescription:
+    'Agent de codage à deux outils : bash persistant et str_replace_editor.',
+  presetCordisName: 'Mode créateur',
+  presetCordisDescription:
+    'Conçu pour créer des présélections d’agent personnalisées, avec toutes les capacités du mode standard plus l’inspection à l’exécution, les expériences de plugins et des conseils de création de présélections.',
+  duplicate: 'Dupliquer',
+  duplicateUnavailable: 'Ce déploiement n’a pas de répertoire de présélections inscriptible',
+  delete: 'Supprimer',
+  presetId: 'Identifiant',
+  presetIdPlaceholder: 'mon-agent',
+  displayName: 'Nom',
+  displayNamePlaceholder: 'Affiché dans le sélecteur ; par défaut, l’identifiant',
+  inUse: 'En cours d’utilisation',
+  builtInGroup: 'Intégrées',
+  customGroup: 'Personnalisées',
+  noDescription: 'Aucune description.',
+  brokenBadge: 'Échec du chargement',
+  brokenNoCopy: 'Une présélection qui n’a pas pu être chargée ne peut pas être dupliquée',
+  copyOf: 'Copiée depuis',
+  composition: 'Composition (agent.cordis.yml)',
+  cancel: 'Annuler',
+  close: 'Fermer',
+  retry: 'Réessayer',
+  copyTitle: 'Dupliquer la présélection',
+  copyIntro:
+    'Toute la présélection est copiée sur cette machine. L’identifiant devient le nom de son répertoire et ne peut plus '
+    + 'être changé ensuite ; tout le reste se modifie directement dans les fichiers de la présélection.',
+  create: 'Créer',
+  creating: 'Création…',
+  creatorDraft: 'Rédigez une présélection personnalisée avec le mode Créateur',
+  openLocation: 'Ouvrir le dossier',
+  showLocation: 'Voir le chemin',
+  revealedPathLabel: 'Fichiers de la présélection :',
+  idRequired: 'Donnez un identifiant à la présélection.',
+  idInvalid: 'Utilisez des lettres minuscules, des chiffres et des tirets, en commençant par une lettre ou un chiffre.',
+  idTaken: 'Une présélection avec cet identifiant existe déjà.',
+  deleteTitle: 'Supprimer cette présélection ?',
+  deleteDescription:
+    'Le répertoire de la présélection est supprimé. Les sessions déjà en cours continuent de fonctionner ; les nouvelles sessions ne pourront plus la sélectionner.',
+  deleteConfirm: 'Supprimer',
+  deleting: 'Suppression…',
+}
+
 /** Preset roster fields needed to resolve Web display copy. */
 export interface PresetDisplaySource {
   /** Stable preset id. */

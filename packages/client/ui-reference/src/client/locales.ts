@@ -34,3 +34,13 @@ export const en = {
   'candidate.session': 'Session',
   'candidate.noCwd': '(no cwd)',
 } satisfies Record<ReferenceKey, string>
+
+/** French dictionary, checked complete against the zh key set. */
+export const fr = {
+  'section.files': 'Fichiers et dossiers',
+  'section.sessions': 'Conversations de session',
+  'candidate.file': 'Fichier',
+  'candidate.folder': 'Dossier',
+  'candidate.session': 'Session',
+  'candidate.noCwd': '(aucun répertoire de travail)',
+} satisfies Record<ReferenceKey, string>

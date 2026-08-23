@@ -26,3 +26,15 @@ export const en = {
   'listbox.aria': '/{command} matches',
   'notice.imagesUnsupported': '/{command} does not accept image attachments; remove them first',
 } satisfies Record<CommandKey, string>
+
+/** French dictionary, checked complete against the zh key set. */
+export const fr = {
+  'search.placeholder': 'Rechercher…',
+  'search.aria': 'Filtrer les options',
+  'status.loading': 'Chargement des options…',
+  'status.applying': 'Application…',
+  'status.empty': 'Aucune option',
+  'overlay.aria': 'Options de /{command}',
+  'listbox.aria': 'Correspondances de /{command}',
+  'notice.imagesUnsupported': '/{command} n’accepte pas les pièces jointes images ; retirez-les d’abord',
+} satisfies Record<CommandKey, string>

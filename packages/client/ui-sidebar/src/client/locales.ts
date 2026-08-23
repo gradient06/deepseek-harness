@@ -18,3 +18,11 @@ export const en = {
   'toggle.open': 'Open sidebar',
   'toggle.collapse': 'Collapse sidebar',
 } satisfies Record<SidebarKey, string>
+
+/** French dictionary, checked complete against the zh key set. */
+export const fr = {
+  'session.new': 'Nouvelle session',
+  'session.new.label': 'Nouvelle session',
+  'toggle.open': 'Ouvrir la barre latérale',
+  'toggle.collapse': 'Réduire la barre latérale',
+} satisfies Record<SidebarKey, string>

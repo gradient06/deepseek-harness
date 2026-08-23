@@ -52,3 +52,24 @@ export const en = {
   'blocked.composer': 'This model is unavailable — select one to continue',
   'empty.efforts': 'This model provides no reasoning effort levels.',
 } satisfies Record<ModelKey, string>
+
+/** French dictionary, checked complete against the zh key set. */
+export const fr = {
+  'command.description': 'Choisir le modèle utilisé par cette session',
+  'option.loadError': 'Échec du chargement du catalogue : {message}',
+  'trigger.fallback': 'Choisir le modèle',
+  'trigger.selectAria': 'Choisir le modèle',
+  'trigger.aria': 'Choisir le modèle, actuel {model}',
+  'trigger.ariaEffort': 'Choisir le modèle, actuel {model}, niveau de raisonnement {effort}',
+  'menu.aria': 'Modèle et niveau de raisonnement',
+  'menu.model': 'Modèle',
+  'menu.effort': 'Niveau de raisonnement',
+  'effort.providerDefault': 'Par défaut',
+  'status.loading': 'Actualisation de la liste des modèles…',
+  'error.action': 'Échec de l’opération sur le modèle : {message}',
+  'action.reload': 'Recharger',
+  'warning.groupLoad': '{name} n’a pas pu être chargé : {message}',
+  'empty.models': 'Aucun modèle disponible.',
+  'blocked.composer': 'Ce modèle n’est pas disponible — choisissez-en un pour continuer',
+  'empty.efforts': 'Ce modèle ne propose aucun niveau de raisonnement.',
+} satisfies Record<ModelKey, string>

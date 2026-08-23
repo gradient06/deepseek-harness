@@ -24,8 +24,8 @@ import { ZH_BROWSER_LOCALE, saveFailureShot } from './support.ts'
 const SNAPSHOT_DIR = fileURLToPath(new URL('./snapshots/settings-chrome', import.meta.url))
 const DIALOG_EXPECTED = join(SNAPSHOT_DIR, 'dialog.expected.md')
 const PLUGINS_EXPECTED = join(SNAPSHOT_DIR, 'plugins.expected.md')
-// The English fallback surface: a browser naming no shipped language.
-const DIALOG_EN_EXPECTED = join(SNAPSHOT_DIR, 'dialog-en.expected.md')
+// The French default surface: a browser naming no shipped language.
+const DIALOG_FR_EXPECTED = join(SNAPSHOT_DIR, 'dialog-fr.expected.md')
 const PLUGIN_ROW_SELECTOR = '[data-plugin-entry$="ui-settings"]'
 const MODE = webSnapshotMode()
 
@@ -464,9 +464,10 @@ describe('web e2e: settings modal and General preferences', () => {
 
   it('opens an English browser in English without any stored preference', async () => {
     // A fresh Host home has no locale preference, so its surface follows the
-    // browser. English is also FALLBACK_LOCALE, so this scenario alone cannot
-    // distinguish detection from the default — the zh scenarios above supply
-    // the discriminating half (a Chinese browser must NOT land on the default).
+    // browser. English is a shipped locale, so this scenario alone cannot
+    // distinguish detection from the default — the zh and French scenarios
+    // above supply the discriminating half (a Chinese browser must NOT land on
+    // the default).
     const fresh = await launchWebScaffold({})
     const enPage = await browser.newPage({ viewport: { width: 1680, height: 1000 }, locale: 'en-US' })
     const enTripwire = watchConsole(enPage)
@@ -489,31 +490,31 @@ describe('web e2e: settings modal and General preferences', () => {
     }
   }, 90_000)
 
-  it('opens a browser asking for no shipped language in English', async () => {
-    // The product default for "no usable signal": a French browser ships
-    // neither zh nor en, so resolution falls to FALLBACK_LOCALE (en) rather
-    // than to Chinese.
+  it('opens a French browser in French without any stored preference', async () => {
+    // A fresh Host home has no locale preference, so its surface follows the
+    // browser: fr is now a shipped locale, and a French browser resolves it
+    // through detection.
     const fresh = await launchWebScaffold({})
     const frPage = await browser.newPage({ viewport: { width: 1680, height: 1000 }, locale: 'fr-FR' })
     const frTripwire = watchConsole(frPage)
-    onTestFailed(() => saveFailureShot(frPage, 'web-e2e-settings-unshipped-language'))
+    onTestFailed(() => saveFailureShot(frPage, 'web-e2e-settings-french-browser'))
     try {
       await frPage.goto(fresh.baseUrl, { waitUntil: 'load' })
       await frPage.waitForSelector('[class*="frame"]', { timeout: 30_000 })
       expect(await frPage.evaluate(() => localStorage.getItem('dsh.locale'))).toBeNull()
-      await frPage.getByRole('button', { name: 'Settings', exact: true }).click()
-      const dialog = frPage.getByRole('dialog', { name: 'Settings' })
+      await frPage.getByRole('button', { name: 'Paramètres', exact: true }).click()
+      const dialog = frPage.getByRole('dialog', { name: 'Paramètres' })
       await dialog.waitFor({ timeout: 10_000 })
-      await dialog.getByRole('button', { name: 'English' }).waitFor({ timeout: 10_000 })
+      await dialog.getByRole('button', { name: 'Français' }).waitFor({ timeout: 10_000 })
       // The markup already ships `en`, so this alone cannot prove the sync ran
       // — the zh scenario above is the discriminating half. Asserted here too
-      // so a future change that resolves en but writes the wrong tag is caught.
-      expect(await frPage.evaluate(() => document.documentElement.lang)).toBe('en')
-      // Golden of the English fallback dialog — the visible output this change
-      // produces. The zh golden above covers the detected-locale surface, so
-      // the pair pins both directions of the resolution.
+      // so a future change that resolves fr but writes the wrong tag is caught.
+      expect(await frPage.evaluate(() => document.documentElement.lang)).toBe('fr')
+      // Golden of the French dialog — the visible output this change produces.
+      // The zh golden above covers the detected-locale surface, so the pair
+      // pins both directions of the resolution.
       const snapshot = await captureStableAria(frPage, '[role="dialog"]', fresh.workspaceCwd)
-      await compareOrRefreshGolden(DIALOG_EN_EXPECTED, snapshot, MODE)
+      await compareOrRefreshGolden(DIALOG_FR_EXPECTED, snapshot, MODE)
       expect(frTripwire.pageErrors).toEqual([])
       expect(frTripwire.warnings).toEqual([])
     } finally {
@@ -522,8 +523,33 @@ describe('web e2e: settings modal and General preferences', () => {
     }
   }, 90_000)
 
+  it('opens a browser asking for no shipped language in French', async () => {
+    // The product default for "no usable signal": a German browser ships
+    // neither zh, en, nor fr, so resolution falls to FALLBACK_LOCALE (fr)
+    // rather than to Chinese.
+    const fresh = await launchWebScaffold({})
+    const dePage = await browser.newPage({ viewport: { width: 1680, height: 1000 }, locale: 'de-DE' })
+    const deTripwire = watchConsole(dePage)
+    onTestFailed(() => saveFailureShot(dePage, 'web-e2e-settings-unshipped-language'))
+    try {
+      await dePage.goto(fresh.baseUrl, { waitUntil: 'load' })
+      await dePage.waitForSelector('[class*="frame"]', { timeout: 30_000 })
+      expect(await dePage.evaluate(() => localStorage.getItem('dsh.locale'))).toBeNull()
+      await dePage.getByRole('button', { name: 'Paramètres', exact: true }).click()
+      const dialog = dePage.getByRole('dialog', { name: 'Paramètres' })
+      await dialog.waitFor({ timeout: 10_000 })
+      await dialog.getByRole('button', { name: 'Français' }).waitFor({ timeout: 10_000 })
+      expect(await dePage.evaluate(() => document.documentElement.lang)).toBe('fr')
+      expect(deTripwire.pageErrors).toEqual([])
+      expect(deTripwire.warnings).toEqual([])
+    } finally {
+      await dePage.close()
+      await fresh.close()
+    }
+  }, 90_000)
+
   it.skipIf(MODE === 'record')('keeps the fixture inventory closed', async () => {
     expect(tripwire.warnings).toEqual([])
-    await assertFixtureInventory(SNAPSHOT_DIR, ['dialog-en.expected.md', 'dialog.expected.md', 'plugins.expected.md'])
+    await assertFixtureInventory(SNAPSHOT_DIR, ['dialog-fr.expected.md', 'dialog.expected.md', 'plugins.expected.md'])
   })
 })

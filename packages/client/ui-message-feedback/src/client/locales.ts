@@ -43,3 +43,20 @@ export const en = {
   'error.load': 'Could not load feedback',
   'error.generic': 'Could not save feedback',
 } satisfies Record<MessageFeedbackKey, string>
+
+/** French dictionary, checked complete against the zh key set. */
+export const fr = {
+  'action.like': 'Bonne réponse',
+  'action.likeActive': 'Retirer la note',
+  'action.dislike': 'Réponse problématique',
+  'action.dislikeActive': 'Retirer la note',
+  'note.open': 'Ajouter une remarque',
+  'note.dialog': 'Retour',
+  'note.placeholder': 'Qu’est-ce qui était bien, ou qu’est-ce qui n’a pas fonctionné ? (facultatif)',
+  'note.save': 'Enregistrer',
+  'note.cancel': 'Annuler',
+  'note.aria': 'Remarque de retour',
+  'error.conflict': 'Ce retour a été modifié ailleurs ; l’état le plus récent est affiché',
+  'error.load': 'Impossible de charger le retour',
+  'error.generic': 'Impossible d’enregistrer le retour',
+} satisfies Record<MessageFeedbackKey, string>

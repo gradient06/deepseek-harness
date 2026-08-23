@@ -79,6 +79,10 @@ async function bench(
   const fiber = ctx.plugin({ inject: [...inject], apply })
   await fiber.await()
   if (source === undefined) throw new Error('reference source was not registered')
+  // No browser `window` here, so a fresh LocaleRuntime opens on the product
+  // default (fr). Stage English explicitly so the label assertions stay
+  // locale-independent; bound `t` reads the active locale at call time.
+  ;(ctx.get('locale') as LocaleRuntime).setLocale('en')
   return { ctx, fiber, source }
 }
 

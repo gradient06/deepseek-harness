@@ -62,3 +62,21 @@ export const en: Record<TrajectoryKey, string> = {
   'toolbar.search': 'Search trajectory',
   'toolbar.searchPlaceholder': 'Search',
 }
+
+/** French dictionary. */
+export const fr: Record<TrajectoryKey, string> = {
+  'view.trajectory': 'Trajectoire',
+  'toolbar.aria': 'Barre d’outils de la trajectoire',
+  'toolbar.duration': 'Durée',
+  'toolbar.useActualDuration': 'Utiliser la durée réelle',
+  'toolbar.useEqualWidth': 'Utiliser des opérations de largeur égale',
+  'toolbar.actualTime': 'Temps réel',
+  'toolbar.turns': 'Tours',
+  'toolbar.expandTurns': 'Déplier les tours',
+  'toolbar.collapseTurns': 'Réduire les tours',
+  'toolbar.calls': 'Appels',
+  'toolbar.expandCalls': 'Déplier les appels',
+  'toolbar.collapseCalls': 'Réduire les appels',
+  'toolbar.search': 'Rechercher dans la trajectoire',
+  'toolbar.searchPlaceholder': 'Rechercher',
+}

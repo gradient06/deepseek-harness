@@ -14,7 +14,7 @@ import type {
 
 // These specs assert the shipped Chinese copy. The lane has no jsdom `window`,
 // so browser-language detection never runs and a fresh LocaleRuntime opens on
-// FALLBACK_LOCALE (en); bench stages zh explicitly on the locale instead.
+// FALLBACK_LOCALE (fr); bench stages zh explicitly on the locale instead.
 
 /**
  * @param served - namespaces the Host describes; omitted answers a failed read,

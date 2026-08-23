@@ -79,5 +79,43 @@ export const en: Record<SubagentKey, string> = {
   'readonly.body': 'The parent session is offline; reopen it to continue sending messages.',
 }
 
+/** French dictionary, key-identical to the Chinese source of truth. */
+export const fr: Record<SubagentKey, string> = {
+  'diagnostic.corrupt': 'enregistrement de session corrompu',
+  'diagnostic.unsupported': 'version d’enregistrement de sous-agent non prise en charge',
+  'diagnostic.unavailable': 'enregistrement de session temporairement indisponible',
+  'duration.seconds': '{seconds}s',
+  'duration.minutes': '{minutes} min {seconds} s',
+  'duration.hours': '{hours} h {minutes} min {seconds} s',
+  'duration.days': '{days} j',
+  'duration.daysHours': '{days} j {hours} h',
+  'duration.months': 'environ {months} mois',
+  'duration.monthsDays': 'environ {months} mois {days} j',
+  'duration.years': 'environ {years} ans',
+  'duration.yearsMonths': 'environ {years} ans {months} mois',
+  'duration.exactDays': '{days} j {hours} h {minutes} min {seconds} s',
+  'duration.exactTitle': 'Durée d’activité totale : {duration}',
+  'loading.label': 'Chargement des sous-agents…',
+  'loading.aria': 'Chargement des sous-agents',
+  'load.error': 'Impossible de charger les sous-agents',
+  'retry': 'Réessayer',
+  'mode.oneShot': 'usage unique',
+  'mode.continuable': 'continuable',
+  'activity.running': 'en cours d’exécution',
+  'activity.inactive': 'non exécuté actuellement',
+  'branch.collapse': 'Réduire les sous-agents descendants de {label}',
+  'branch.expand': 'Déplier les sous-agents descendants de {label}',
+  'count.total.one': '{count} sous-agent',
+  'count.total.other': '{count} sous-agents',
+  'count.running.one': '{count} sous-agent en cours d’exécution',
+  'count.running.other': '{count} sous-agents en cours d’exécution',
+  'switcher.aria': 'Changer de sous-agent : {title}',
+  'tree.aria': 'Sessions de sous-agents',
+  'readonly.oneShot.title': 'Enregistrement de sous-agent à usage unique',
+  'readonly.title': 'Ce sous-agent est en lecture seule pour le moment',
+  'readonly.oneShot.body': 'Les tâches à usage unique n’acceptent pas de messages suivants ; consultez ici l’enregistrement complet de l’exécution.',
+  'readonly.body': 'La session parente est hors ligne ; rouvrez-la pour continuer à envoyer des messages.',
+}
+
 /** Key domain of the `subagent` namespace (zh is the source of truth). */
 export type SubagentKey = keyof typeof zh

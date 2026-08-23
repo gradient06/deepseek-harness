@@ -1,0 +1,45 @@
+- dialog "Paramètres":
+  - navigation:
+    - text: Paramètres
+    - button "Général":
+      - img
+      - text: Général
+    - button "Modèles":
+      - img
+      - text: Modèles
+    - button "Plugins":
+      - img
+      - text: Plugins
+    - button "Présélections d’agent":
+      - img
+      - text: Présélections d’agent
+  - button "Ouvrir le fichier de configuration"
+  - button "Fermer":
+    - img
+    - text: Fermer
+  - text: Présélection d’agent S’applique aux sessions démarrées à partir de maintenant. Les sessions en cours conservent la présélection avec laquelle elles ont commencé.
+  - button "Mode standard" [disabled]:
+    - text: Mode standard
+    - img
+  - text: Autorisations Choisir le mode d’autorisation par défaut des nouvelles sessions
+  - button "Workspace Write":
+    - text: Workspace Write
+    - img
+  - text: Langue
+  - button "Français":
+    - text: Français
+    - img
+  - text: Apparence
+  - button "Clair":
+    - img
+    - text: Clair
+  - button "Sombre":
+    - img
+    - text: Sombre
+  - button "Système" [pressed]:
+    - img
+    - text: Système
+  - text: Comportement d’Entrée quand l’agent est occupé Agent occupé uniquement ; Cmd/Ctrl+Entrée utilise l’autre comportement
+  - button "Mettre en file":
+    - text: Mettre en file
+    - img

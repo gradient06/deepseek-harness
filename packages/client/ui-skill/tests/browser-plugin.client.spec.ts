@@ -138,6 +138,13 @@ describe('apply', () => {
           'row.instructions': 'Instructions',
           'menu.userOnly': 'user-only',
         },
+        fr: {
+          'row.running': 'Chargement de la compétence',
+          'row.failed': 'Échec du chargement de la compétence',
+          'row.stopped': 'Chargement de la compétence interrompu',
+          'row.instructions': 'Instructions',
+          'menu.userOnly': 'utilisateur uniquement',
+        },
       },
     }])
   })

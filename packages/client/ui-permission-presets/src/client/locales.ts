@@ -49,3 +49,25 @@ export const accessEn = {
   'confirm.cancel': 'Cancel',
   'confirm.enable': 'Enable Full access',
 } satisfies Record<PermissionAccessKey, string>
+
+/** French dictionary, checked complete against the zh key set. */
+export const fr = {
+  'title': 'Autorisations',
+  'description': 'Choisir le mode d’autorisation par défaut des nouvelles sessions',
+  'loading': 'Chargement',
+  'unavailable': 'Indisponible',
+  'confirm.title': 'Activer Full access ?',
+  'confirm.description': 'Full access permet aux nouvelles sessions de réduire les étapes de confirmation et d’effectuer directement davantage d’actions, y compris des opérations sensibles, des modifications de fichiers ou des commandes externes. Utilisez-le uniquement lorsque vous faites confiance aux tâches à venir.',
+  'confirm.acknowledge': 'Je comprends les risques et je veux continuer',
+  'confirm.cancel': 'Annuler',
+  'confirm.enable': 'Activer Full access',
+} satisfies Record<PermissionSettingsKey, string>
+
+/** French dictionary for the current-session popup gate. */
+export const accessFr = {
+  'confirm.title': 'Activer Full access ?',
+  'confirm.description': 'Full access réduit les étapes de confirmation et permet à l’agent d’effectuer directement davantage d’actions, y compris des opérations sensibles, des modifications de fichiers ou des commandes externes. Utilisez-le uniquement lorsque vous faites confiance à la tâche en cours.',
+  'confirm.acknowledge': 'Je comprends les risques et je veux continuer',
+  'confirm.cancel': 'Annuler',
+  'confirm.enable': 'Activer Full access',
+} satisfies Record<PermissionAccessKey, string>
