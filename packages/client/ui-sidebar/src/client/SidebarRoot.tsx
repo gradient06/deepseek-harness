@@ -207,7 +207,7 @@ export function SidebarRoot({
         {/* Custom build version (gradient06 fork + evolutions). */}
         {wide && (
           <div className={css.version} title="Interface custom (fork gradient06)">
-            interface v0.1.1-rc.2-g06.2
+            interface v0.1.1-rc.2-g06.3
           </div>
         )}
       </div>
