@@ -484,6 +484,31 @@ describe('working-directory file intake', () => {
       vi.unstubAllGlobals()
     }
   })
+
+  it('opens the OS picker from the tool-row button and routes what it returns', async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ name: 'notes.txt', path: 'notes.txt', bytes: 3 }),
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+    try {
+      const addImages = vi.fn(() => null)
+      const result = bench({ addImages })
+      const picker = result.view.container.querySelector<HTMLInputElement>('input[data-file-picker]')!
+      expect(picker.multiple).toBe(true)
+      const openPicker = vi.spyOn(picker, 'click')
+      fireEvent.click(result.view.getByRole('button', { name: '选择文件加入工作目录' }))
+      expect(openPicker).toHaveBeenCalledTimes(1)
+      // The dialog's answer: an image keeps the rail, a document is written.
+      const image = new File([Uint8Array.of(1)], 'pixel.png', { type: 'image/png' })
+      Object.defineProperty(picker, 'files', { value: [image, dropped()], configurable: true })
+      await act(async () => { fireEvent.change(picker) })
+      expect(addImages).toHaveBeenCalledWith([image])
+      expect(result.shell.snapshot.draft).toBe('📎 已加入工作目录：notes.txt')
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
 })
 
 describe('Enter semantics', () => {

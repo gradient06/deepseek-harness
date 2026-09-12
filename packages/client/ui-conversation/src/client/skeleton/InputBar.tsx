@@ -10,6 +10,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import type { ChangeEvent, KeyboardEvent, MouseEvent, ReactNode } from 'react'
 import clsx from 'clsx'
 import {
+  IconPaperclipOutline16,
   IconPlusOutline16, IconWarningOutline16, Toast, Tooltip,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 // Type-only: the `plan` projection key merge (the TodoDock posture — the
@@ -140,6 +141,8 @@ export function InputBar({
   const cardRef = useRef<HTMLDivElement | null>(null)
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const mirrorRef = useRef<HTMLDivElement | null>(null)
+  /** The hidden OS file dialog the tool row's picker button opens. */
+  const filePickerRef = useRef<HTMLInputElement | null>(null)
   // Shell-like prompt history: ArrowUp/ArrowDown walk submitted prompts; the
   // live draft is restored when walking back past the newest entry.
   const historyRef = useRef<string[]>(readPromptHistory())
@@ -630,7 +633,10 @@ export function InputBar({
     })()
   }, [keyboard, sessionId, showToast, t])
 
-  const canAcceptDrop = !locked && !machineBusy && (addImages !== undefined || sessionId !== undefined)
+  // Files arrive three ways — dropped on the page, pasted from the clipboard,
+  // or chosen from the picker button — and share one acceptance gate.
+  const canIntakeFiles = !locked && !machineBusy && (addImages !== undefined || sessionId !== undefined)
+  const canAcceptDrop = canIntakeFiles
 
   // One split for both gestures that can carry files (drop and paste): images
   // keep the draft rail's own path and validation, everything else is written
@@ -926,6 +932,33 @@ export function InputBar({
                 <IconPlusOutline16 size={14} />
               </button>
             </Tooltip>
+            {/* The picker button is the visible half of the file intake: the same
+              batch the page accepts as a drop, chosen from the OS dialog. */}
+            <Tooltip label={t('file.pick')} side="top" delayMs={500}>
+              <button
+                type="button"
+                className={css.add}
+                aria-label={t('file.pick')}
+                disabled={!canIntakeFiles}
+                onMouseDown={keepFocus}
+                onClick={() => { filePickerRef.current?.click() }}
+              >
+                <IconPaperclipOutline16 size={14} />
+              </button>
+            </Tooltip>
+            <input
+              ref={filePickerRef}
+              type="file"
+              multiple
+              hidden
+              data-file-picker
+              onChange={(event) => {
+                const picked = [...(event.target.files ?? [])]
+                // Clear first: re-picking the same file must fire a change again.
+                event.target.value = ''
+                routeFiles(picked)
+              }}
+            />
             {attachments.length > 0 && (
               <Tooltip label="OCR l'image (Mistral)" side="top" delayMs={500}>
                 <button
