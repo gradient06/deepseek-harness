@@ -34,14 +34,18 @@ export function messageImageLabels(t: TranslateNS<'conversation'>): MessageImage
  * @param t - conversation namespace translator.
  * @param accepting - whether the composer can accept dropped files.
  * @param limits - optional translated count and size values.
+ * @param acceptsFiles - whether the composer also writes non-image drops into
+ *   the session's working directory, which changes the invitation's wording.
  * @returns translated drop-overlay labels.
  */
 export function dropOverlayLabels(
   t: TranslateNS<'conversation'>,
   accepting: boolean,
   limits?: { readonly count: number; readonly size: string },
+  acceptsFiles = false,
 ): DropOverlayLabels {
   if (!accepting) return { title: t('image.dropBlocked') }
+  if (acceptsFiles) return { title: t('file.dropTitle'), desc: t('file.dropDesc') }
   return {
     title: t('image.dropTitle'),
     desc: limits === undefined ? undefined : t('image.dropDesc', limits),

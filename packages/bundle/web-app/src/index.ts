@@ -12,9 +12,11 @@
  */
 
 import { spawn, type ChildProcess } from 'node:child_process'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
+import { writeFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { homedir, networkInterfaces } from 'node:os'
+import { basename, extname, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { Context } from '@deepseek-ai/cordis'
@@ -25,6 +27,7 @@ import { launchEnvironmentOf } from '@deepseek-ai/dsh-launch-environment'
 import { scrubbedParentEnv } from '@deepseek-ai/dsh-subprocess'
 import type {} from '@deepseek-ai/cordis-plugin-loader'
 import type {} from '@deepseek-ai/dsh-host-webserver'
+import type { SessionId } from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-system-prompt'
 import type {} from '@deepseek-ai/dsh-shell-env'
 
@@ -110,6 +113,123 @@ async function handleOcr(req: IncomingMessage, res: ServerResponse): Promise<voi
     const data = (await response.json()) as { pages?: { markdown?: string }[] }
     const text = (data.pages ?? []).map(page => page.markdown ?? '').join('\n\n').trim()
     writeJson(200, { text })
+  } catch (error) {
+    writeJson(500, { error: error instanceof Error ? error.message : String(error) })
+  }
+}
+
+/** Largest body the working-directory upload route accepts. */
+const UPLOAD_MAX_BYTES = 64 * 1024 * 1024
+
+/** Longest file name the upload route accepts (bytes, one path component). */
+const UPLOAD_MAX_NAME_BYTES = 255
+
+/**
+ * Pick a name no entry in `cwd` occupies, keeping the extension: `report.pdf`,
+ * then `report-1.pdf`, and so on. An upload never overwrites a file a session
+ * already has.
+ * @param cwd - absolute session working directory.
+ * @param name - validated single-component file name.
+ * @returns the free name, or undefined when every candidate is taken.
+ */
+function freeNameIn(cwd: string, name: string): string | undefined {
+  const extension = extname(name)
+  const stem = name.slice(0, name.length - extension.length)
+  for (let index = 0; index < 100; index += 1) {
+    const candidate = index === 0 ? name : `${stem}-${String(index)}${extension}`
+    if (!existsSync(join(cwd, candidate))) return candidate
+  }
+  return undefined
+}
+
+/**
+ * POST /api/workspace-file?session=<id>&name=<name> — write the request body
+ * into the addressed session's working directory and answer with the name and
+ * the path relative to that directory. Custom evolution: a file dropped on the
+ * composer lands in the project the agent's own tools read, instead of staying
+ * inside the browser.
+ *
+ * The session id is the only authority the request carries: the directory comes
+ * from the host-resident session header, never from the client, and `name` must
+ * be one path component, so a request cannot address anything outside its own
+ * session's project. An existing file is never replaced — the route answers
+ * with a suffixed name instead.
+ * @param ctx - host context carrying the session store.
+ * @param req - the incoming request.
+ * @param res - the response to answer on.
+ */
+async function handleWorkspaceFile(
+  ctx: Context,
+  req: IncomingMessage,
+  res: ServerResponse,
+): Promise<void> {
+  const writeJson = (status: number, body: unknown): void => {
+    res.writeHead(status, { 'content-type': 'application/json' })
+    res.end(JSON.stringify(body))
+  }
+  if (req.method !== 'POST') {
+    res.writeHead(405)
+    res.end()
+    return
+  }
+  const query = new URL(req.url ?? '/', 'http://localhost').searchParams
+  const sessionId = query.get('session') ?? ''
+  const name = query.get('name') ?? ''
+  if (sessionId === '') {
+    writeJson(400, { error: 'session manquante' })
+    return
+  }
+  if (name === '' || name === '.' || name === '..' || basename(name) !== name) {
+    writeJson(400, { error: 'nom de fichier invalide' })
+    return
+  }
+  if (Buffer.byteLength(name) > UPLOAD_MAX_NAME_BYTES) {
+    writeJson(400, { error: 'nom de fichier trop long' })
+    return
+  }
+  // The id arrives off the wire: this cast is the parser step, and the store
+  // lookup below is the validation — an unknown id takes the not-found arm.
+  const session = ctx.get('sessions')?.get(sessionId as SessionId)
+  if (session === undefined) {
+    writeJson(404, { error: `session introuvable : ${sessionId}` })
+    return
+  }
+  const cwd = session.header.cwd
+  if (cwd === undefined) {
+    writeJson(409, { error: 'cette session n\'a pas de répertoire de travail' })
+    return
+  }
+  const chunks: Buffer[] = []
+  let size = 0
+  try {
+    for await (const chunk of req) {
+      const buf = chunk as Buffer
+      size += buf.length
+      if (size > UPLOAD_MAX_BYTES) {
+        writeJson(413, { error: 'fichier trop volumineux' })
+        return
+      }
+      chunks.push(buf)
+    }
+  } catch {
+    writeJson(400, { error: 'lecture du corps impossible' })
+    return
+  }
+  const free = freeNameIn(cwd, name)
+  if (free === undefined) {
+    writeJson(409, { error: `aucun nom libre pour « ${name} »` })
+    return
+  }
+  const target = join(cwd, free)
+  // Defense in depth: `name` is already one component, so this can only trip if
+  // a future validation change lets a separator through.
+  if (!resolve(target).startsWith(resolve(cwd) + sep)) {
+    writeJson(400, { error: 'chemin hors du répertoire de travail' })
+    return
+  }
+  try {
+    await writeFile(target, Buffer.concat(chunks))
+    writeJson(200, { name: free, path: relative(cwd, target), bytes: size })
   } catch (error) {
     writeJson(500, { error: error instanceof Error ? error.message : String(error) })
   }
@@ -315,6 +435,14 @@ export function apply(ctx: Context, config: Config): void {
     path: '/api/ocr',
     handler: async (req, res) => { await handleOcr(req, res) },
   }), 'web-app: /api/ocr (Mistral OCR)')
+  // Working-directory upload endpoint for composer file drops (custom
+  // evolution — the file lands in the session project, so the agent's own
+  // tools read it; the composer mentions the returned path in the draft).
+  ctx.effect(() => ctx.webServer.register({
+    kind: 'exact',
+    path: '/api/workspace-file',
+    handler: async (req, res) => { await handleWorkspaceFile(ctx, req, res) },
+  }), 'web-app: /api/workspace-file (composer file drop)')
   if (config.surfaceContext) {
     ctx.inject(['systemPrompt'], (promptCtx) => {
       addHarnessSourceSection(promptCtx, SOURCE_ROOT)

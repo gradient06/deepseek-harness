@@ -384,7 +384,9 @@ describe('image draft rail', () => {
       const paste = () => {
         fireEvent.paste(textarea, {
           clipboardData: {
-            items: [{ kind: 'file', type: 'text/plain', getAsFile: () => new File(['x'], 'note.txt', { type: 'text/plain' }) }],
+            // An image MIME the intake rejects: a non-image clipboard file takes
+            // the working-directory path instead (see the file-intake suite).
+            items: [{ kind: 'file', type: 'image/bmp', getAsFile: () => new File(['x'], 'scan.bmp', { type: 'image/bmp' }) }],
             getData: () => '',
           },
         })
@@ -410,6 +412,77 @@ describe('image draft rail', () => {
       ])
     })
     expect(result.view.getByRole('alert').textContent).toContain('图片读取服务不可用')
+  })
+})
+
+describe('working-directory file intake', () => {
+  /** A dropped or picked non-image file handed to the composer's file intake. */
+  const dropped = (name = 'notes.txt'): File =>
+    new File([Uint8Array.of(1, 2, 3)], name, { type: 'text/plain' })
+
+  it('writes a dropped file through the host route and mentions its path in the draft', async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ name: 'notes.txt', path: 'docs/notes.txt', bytes: 3 }),
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+    try {
+      const result = bench({ draft: 'explique ce document' })
+      const file = dropped()
+      await act(async () => { attachmentOwner(result.slotCalls).onAddFiles?.([file]) })
+      expect(fetchMock).toHaveBeenCalledWith(
+        `/api/workspace-file?session=${SID}&name=notes.txt`,
+        expect.objectContaining({ method: 'POST', body: file }),
+      )
+      expect(result.shell.snapshot.draft).toBe('explique ce document\n📎 已加入工作目录：docs/notes.txt')
+      expect(result.view.getByRole('alert').textContent).toContain('已将 1 个文件加入工作目录')
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('announces a refused write with the host reason and leaves the draft untouched', async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: false,
+      status: 404,
+      json: async () => ({ error: 'session introuvable : s1' }),
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+    try {
+      const result = bench()
+      await act(async () => { attachmentOwner(result.slotCalls).onAddFiles?.([dropped('big.pdf')]) })
+      expect(result.shell.snapshot.draft).toBe('')
+      const alert = result.view.getByRole('alert').textContent ?? ''
+      expect(alert).toContain('big.pdf')
+      expect(alert).toContain('session introuvable : s1')
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('names the HTTP status when the route answers without a reason body', async () => {
+    const fetchMock = vi.fn(async () => ({ ok: false, status: 413, json: async () => { throw new Error('no body') } }))
+    vi.stubGlobal('fetch', fetchMock)
+    try {
+      const result = bench()
+      await act(async () => { attachmentOwner(result.slotCalls).onAddFiles?.([dropped()]) })
+      expect(result.view.getByRole('alert').textContent).toContain('HTTP 413')
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('keeps an empty file batch inert', async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    try {
+      const result = bench()
+      await act(async () => { attachmentOwner(result.slotCalls).onAddFiles?.([]) })
+      expect(fetchMock).not.toHaveBeenCalled()
+      expect(result.shell.snapshot.draft).toBe('')
+    } finally {
+      vi.unstubAllGlobals()
+    }
   })
 })
 

@@ -38,6 +38,12 @@ export interface ComposerAttachmentsOwnerProps {
   canAcceptDrop: boolean
   /** Add one dropped batch through the composer's validation path. */
   onAddImages: (files: readonly File[]) => void
+  /**
+   * Write one dropped batch of non-image files into the session's working
+   * directory. Absent when the composer offers no file intake, in which case a
+   * non-image drop keeps the image path's own format refusal.
+   */
+  onAddFiles?: ((files: readonly File[]) => void) | undefined
   /** Remove one draft image through the conversation service. */
   onRemoveImage: (id: DraftAttachmentId) => void
   /** Display-ready limits for the drop invitation. */

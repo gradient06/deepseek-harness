@@ -546,7 +546,7 @@ export function InputBar({
       .filter(item => item.kind === 'file')
       .map(item => item.getAsFile())
       .filter((file): file is File => file !== null)
-    if (files.length > 0) intakeImages(files)
+    if (files.length > 0) routeFiles(files)
     const text = e.clipboardData.getData('text/plain')
     if (text === '') {
       if (files.length > 0) e.preventDefault()
@@ -597,7 +597,50 @@ export function InputBar({
     if (rejected !== null) showToast(rejected)
   }, [addImages, attachments, imageLimits, showToast, t])
 
-  const canAcceptDrop = !locked && !machineBusy && addImages !== undefined
+  // Custom evolution: a dropped non-image file is written into the session's
+  // working directory by the host and mentioned in the draft, so the agent's
+  // own tools can read it without the user describing where it is.
+  const uploadFiles = useCallback((files: readonly File[]): void => {
+    if (sessionId === undefined || files.length === 0) return
+    void (async () => {
+      const added: string[] = []
+      for (const file of files) {
+        try {
+          const query = new URLSearchParams({ session: sessionId, name: file.name })
+          const resp = await fetch(`/api/workspace-file?${query.toString()}`, {
+            method: 'POST',
+            headers: { 'Content-Type': file.type || 'application/octet-stream' },
+            body: file,
+          })
+          const data = await resp.json().catch(() => null) as { path?: string; error?: string } | null
+          if (!resp.ok) throw new Error(data?.error ?? `HTTP ${resp.status}`)
+          if (data?.path !== undefined) added.push(data.path)
+        } catch (error) {
+          showToast(t('file.uploadFailed', {
+            name: file.name,
+            reason: error instanceof Error ? error.message : String(error),
+          }))
+        }
+      }
+      if (added.length === 0 || keyboard === undefined) return
+      const line = t('file.added', { files: added.join(', ') })
+      const current = keyboard.snapshot.draft
+      keyboard.setDraft(current === '' ? line : `${current}\n${line}`)
+      showToast(t(added.length === 1 ? 'file.uploaded.one' : 'file.uploaded.other', { count: added.length }))
+    })()
+  }, [keyboard, sessionId, showToast, t])
+
+  const canAcceptDrop = !locked && !machineBusy && (addImages !== undefined || sessionId !== undefined)
+
+  // One split for both gestures that can carry files (drop and paste): images
+  // keep the draft rail's own path and validation, everything else is written
+  // into the session's working directory.
+  const routeFiles = useCallback((files: readonly File[]): void => {
+    const images = files.filter(file => file.type.startsWith('image/'))
+    const others = files.filter(file => !file.type.startsWith('image/'))
+    if (images.length > 0) intakeImages(images)
+    if (others.length > 0) uploadFiles(others)
+  }, [intakeImages, uploadFiles])
 
   // Custom evolution: OCR the first pasted image through the host's /api/ocr
   // (Mistral OCR) and append the recognized text to the draft — the current
@@ -810,6 +853,7 @@ export function InputBar({
           attachments,
           canAcceptDrop,
           onAddImages: intakeImages,
+          onAddFiles: uploadFiles,
           onRemoveImage: (id) => { removeImage?.(id) },
           dropLimits: imageLimits === undefined ? undefined : {
             count: imageLimits.maxImagesPerMessage,

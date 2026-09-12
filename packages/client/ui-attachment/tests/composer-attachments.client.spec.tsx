@@ -31,6 +31,8 @@ const t = ((key: string, params?: Readonly<Record<string, unknown>>): string => 
     'image.scrollRight': '向右滚动图片',
     'image.dropBlocked': '当前无法添加图片',
     'image.dropTitle': '图片拖动到此处即可添加',
+    'file.dropTitle': '将文件拖动到此处，即可写入本会话的工作目录',
+    'file.dropDesc': '文件保存到本会话的工作目录，智能体可直接读取',
   }
   if (key === 'image.remove') {
     const name = params?.name
@@ -156,5 +158,29 @@ describe('ComposerAttachments', () => {
     expect(view.getByAltText('待发送图片')).toBeTruthy()
     fireEvent.click(view.getByTitle('查看原图'))
     expect(view.getByAltText('原图')).toBeTruthy()
+  })
+
+  it('splits a mixed drop: images to the rail, other files to the working-directory intake', () => {
+    const onAddImages = vi.fn()
+    const onAddFiles = vi.fn()
+    render(<ComposerAttachments {...props({ onAddImages, onAddFiles })} />)
+    const image = attachment('mixed').file
+    const document_ = new File([Uint8Array.of(2)], 'report.pdf', { type: 'application/pdf' })
+    const dataTransfer = { types: ['Files'], files: [image, document_], dropEffect: 'none' }
+    fireEvent.dragEnter(document.body, { dataTransfer })
+    // The invitation switches to the file wording while the composer takes files.
+    expect(document.body.textContent).toContain('文件保存到本会话的工作目录，智能体可直接读取')
+    fireEvent.drop(document.body, { dataTransfer })
+    expect(onAddImages).toHaveBeenCalledWith([image])
+    expect(onAddFiles).toHaveBeenCalledWith([document_])
+  })
+
+  it('keeps a non-image drop on the image path when the composer takes no files', () => {
+    const onAddImages = vi.fn()
+    render(<ComposerAttachments {...props({ onAddImages })} />)
+    const document_ = new File([Uint8Array.of(3)], 'notes.txt', { type: 'text/plain' })
+    const dataTransfer = { types: ['Files'], files: [document_], dropEffect: 'none' }
+    fireEvent.drop(document.body, { dataTransfer })
+    expect(onAddImages).toHaveBeenCalledWith([document_])
   })
 })

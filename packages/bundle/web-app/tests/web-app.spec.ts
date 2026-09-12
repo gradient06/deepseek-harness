@@ -7,10 +7,11 @@
 
 import { EventEmitter } from 'node:events'
 import { spawn, type ChildProcess } from 'node:child_process'
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import type { IncomingMessage, ServerResponse } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { PassThrough } from 'node:stream'
+import { PassThrough, Readable } from 'node:stream'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import { createLaunchEnvironmentSnapshot, DSH_LAUNCH_ENVIRONMENT_KEY } from '@deepseek-ai/dsh-launch-environment'
@@ -68,9 +69,20 @@ function stageDist(): string {
   return index
 }
 
-/** A fake webServer capturing the fallback seat and index taps. */
-function fakeHttpServer(host: '127.0.0.1' | '0.0.0.0' = '127.0.0.1'): { server: WebServer; seat: () => unknown } {
+/** One registered exact route and the handler the bundle supplied for it. */
+interface RegisteredRoute {
+  path: string
+  handler: (req: IncomingMessage, res: ServerResponse) => Promise<void>
+}
+
+/** A fake webServer capturing the fallback seat, index taps, and exact routes. */
+function fakeHttpServer(host: '127.0.0.1' | '0.0.0.0' = '127.0.0.1'): {
+  server: WebServer
+  seat: () => unknown
+  routes: Map<string, RegisteredRoute['handler']>
+} {
   let fallback: unknown
+  const routes = new Map<string, RegisteredRoute['handler']>()
   const server = {
     host,
     port: 4567,
@@ -78,9 +90,52 @@ function fakeHttpServer(host: '127.0.0.1' | '0.0.0.0' = '127.0.0.1'): { server: 
       fallback = handler
       return () => { fallback = undefined }
     },
+    register: (route: RegisteredRoute) => {
+      routes.set(route.path, route.handler)
+      return () => { routes.delete(route.path) }
+    },
     renderIndex: (html: string) => html,
   } as unknown as WebServer
-  return { server, seat: () => fallback }
+  return { server, seat: () => fallback, routes }
+}
+
+/** One captured route's answer: status plus the parsed JSON body when it sent one. */
+interface RouteAnswer {
+  status: number
+  body: unknown
+}
+
+/**
+ * Drive one registered route with a raw request body and URL.
+ * @param handler - the captured route handler.
+ * @param options - request method, URL, and body text.
+ * @returns the status and parsed JSON body the handler answered with.
+ */
+async function callRoute(
+  handler: RegisteredRoute['handler'],
+  options: { url: string; body?: string; method?: string },
+): Promise<RouteAnswer> {
+  const req = Readable.from(options.body === undefined ? [] : [Buffer.from(options.body)])
+  const answer: RouteAnswer = { status: 0, body: undefined }
+  const res = {
+    writeHead: (status: number) => { answer.status = status },
+    end: (payload?: string) => {
+      answer.body = payload === undefined ? undefined : JSON.parse(payload)
+    },
+  } as unknown as ServerResponse
+  Object.assign(req, { method: options.method ?? 'POST', url: options.url })
+  await handler(req as unknown as IncomingMessage, res)
+  return answer
+}
+
+/** A fake session store answering the cwd this route reads. */
+function provideSessions(ctx: Context, sessions: Record<string, { cwd?: string }>): void {
+  ctx.provide('sessions', {
+    get: (id: string) => {
+      const session = sessions[id]
+      return session === undefined ? undefined : { header: session }
+    },
+  } as never)
 }
 
 /** A fake Loader whose settlement the test controls (the URL line waits on it). */
@@ -374,5 +429,109 @@ describe('web-app runtime glue', () => {
     errored.emit('error', new Error('spawn failed'))
     await errorAssertion
     expect(errored.listenerCount('close')).toBe(0)
+  })
+})
+
+describe('working-directory upload route', () => {
+  /** Mount the bundle over a fake server and one session's cwd. */
+  async function bench(sessions: Record<string, { cwd?: string }>) {
+    stageDist()
+    const ctx = new Context()
+    const { server, routes } = fakeHttpServer()
+    ctx.provide('webServer', server)
+    provideSessions(ctx, sessions)
+    apply(ctx, new Config({ openBrowser: false, printUrl: false, surfaceContext: false, trustedHosts: [] }))
+    const handler = routes.get('/api/workspace-file')
+    if (handler === undefined) throw new Error('the bundle did not register /api/workspace-file')
+    return { ctx, handler }
+  }
+
+  /** One temporary working directory removed with the test. */
+  function tempCwd(): string {
+    latestCwd = mkdtempSync(join(tmpdir(), 'dsh-upload-cwd-'))
+    return latestCwd
+  }
+
+  let latestCwd: string | undefined
+
+  /**
+   * Yield one macrotask before teardown: the package-invariant host mounts its
+   * companion through a promise chain the first plugin mount starts, and
+   * disposing the root first leaves that mount on an inactive context.
+   */
+  const settle = (): Promise<void> => new Promise(resolve => setTimeout(resolve, 0))
+
+  afterEach(() => {
+    if (latestCwd !== undefined) rmSync(latestCwd, { recursive: true, force: true })
+    latestCwd = undefined
+  })
+
+  it('writes the dropped body into the session cwd and answers its relative path', async () => {
+    const cwd = tempCwd()
+    const { ctx, handler } = await bench({ 'session-1': { cwd } })
+    const answer = await callRoute(handler, {
+      url: '/api/workspace-file?session=session-1&name=notes.txt',
+      body: 'bonjour',
+    })
+    expect(answer.status).toBe(200)
+    expect(answer.body).toEqual({ name: 'notes.txt', path: 'notes.txt', bytes: 7 })
+    expect(readFileSync(join(cwd, 'notes.txt'), 'utf8')).toBe('bonjour')
+    await settle()
+    await ctx.fiber.dispose()
+  })
+
+  it('never replaces a file the session already has: it answers a suffixed name', async () => {
+    const cwd = tempCwd()
+    writeFileSync(join(cwd, 'notes.txt'), 'existing')
+    const { ctx, handler } = await bench({ 'session-1': { cwd } })
+    const answer = await callRoute(handler, {
+      url: '/api/workspace-file?session=session-1&name=notes.txt',
+      body: 'new',
+    })
+    expect(answer.status).toBe(200)
+    expect(answer.body).toEqual({ name: 'notes-1.txt', path: 'notes-1.txt', bytes: 3 })
+    expect(readFileSync(join(cwd, 'notes.txt'), 'utf8')).toBe('existing')
+    expect(readFileSync(join(cwd, 'notes-1.txt'), 'utf8')).toBe('new')
+    await settle()
+    await ctx.fiber.dispose()
+  })
+
+  it('refuses a name that is not a single path component', async () => {
+    const cwd = tempCwd()
+    const { ctx, handler } = await bench({ 'session-1': { cwd } })
+    for (const name of ['../escape.txt', 'nested/file.txt', '..', '']) {
+      const answer = await callRoute(handler, {
+        url: `/api/workspace-file?session=session-1&name=${encodeURIComponent(name)}`,
+        body: 'x',
+      })
+      expect(answer.status).toBe(400)
+    }
+    expect(existsSync(join(cwd, '..', 'escape.txt'))).toBe(false)
+    await settle()
+    await ctx.fiber.dispose()
+  })
+
+  it('answers not-found for an unknown session and conflict for a cwd-less one', async () => {
+    const cwd = tempCwd()
+    const { ctx, handler } = await bench({ 'session-1': { cwd }, 'session-2': {} })
+    const missing = await callRoute(handler, {
+      url: '/api/workspace-file?session=nope&name=a.txt',
+      body: 'x',
+    })
+    expect(missing.status).toBe(404)
+    const cwdless = await callRoute(handler, {
+      url: '/api/workspace-file?session=session-2&name=a.txt',
+      body: 'x',
+    })
+    expect(cwdless.status).toBe(409)
+    const nameless = await callRoute(handler, { url: '/api/workspace-file?session=session-1', body: 'x' })
+    expect(nameless.status).toBe(400)
+    const wrongMethod = await callRoute(handler, {
+      url: '/api/workspace-file?session=session-1&name=a.txt',
+      method: 'GET',
+    })
+    expect(wrongMethod.status).toBe(405)
+    await settle()
+    await ctx.fiber.dispose()
   })
 })
