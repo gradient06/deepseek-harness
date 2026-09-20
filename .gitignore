@@ -39,3 +39,10 @@ apps/web/dist/
 worktrees/
 .agents/worktrees/
 .typert-*/
+
+# container workspace mount
+/workspace
+
+# container build artifacts
+/build.log
+/.docker-config

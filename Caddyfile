@@ -1,0 +1,18 @@
+# Caddy reverse proxy for the DSH web container (Phase 0 local access).
+#
+# DSH binds only 127.0.0.1 (the repo rejects `--host 0.0.0.0` until an
+# authentication layer exists), so Caddy binds 0.0.0.0:3081 and forwards to
+# DSH's internal loopback 127.0.0.1:8081. The published container port is 3081
+# (user-chosen). auto_https is off: this is the plain-HTTP local/dev phase;
+# Phase 4 enables TLS/Let's Encrypt here for the public deployment.
+
+{
+	# Do not attempt automatic HTTPS for a bare port listener.
+	auto_https off
+}
+
+:3081 {
+	# Preserve the original Host header so DSH's /api browser-trust fence still
+	# sees a loopback authority (localhost:3081) on local requests.
+	reverse_proxy 127.0.0.1:8081
+}

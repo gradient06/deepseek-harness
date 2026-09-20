@@ -1,0 +1,42 @@
+# Local dev/test compose for the DSH web container (Phase 0).
+#
+# DSH binds only 127.0.0.1 (the repo rejects `--host 0.0.0.0` until an
+# authentication layer exists), so the container runs Caddy on 0.0.0.0:3081 and
+# forwards to DSH's loopback 127.0.0.1:8081. The published port is 3081
+# (user-chosen): open http://localhost:3081 from the host. This is also the
+# layout a Caddy sidecar (Phase 4) will front on a VPS with TLS.
+#
+# Secrets: DEEPSEEK_API_KEY is read from the host environment (or a .env file
+# next to this file, which compose loads automatically). Never hardcode it.
+#
+#   docker compose up --build
+#
+# Build the image with the same commit hash the host repo has, so the client
+# artifact record is truthful:
+#   docker build --build-arg DSH_CLIENT_COMMIT_HASH=$(git rev-parse HEAD) .
+
+services:
+  dsh:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      # The build reads the real commit hash from the in-context .git; an
+      # alternative is a --build-arg (see the Dockerfile comment).
+    image: deepseek-harness:local
+    ports:
+      # Caddy (in-container), exposed on host: published port 3081.
+      - "3081:3081"
+    environment:
+      DSH_HOME: /data/.dsh
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      DSH_TELEMETRY_DISABLED: "1"
+    volumes:
+      # Persistent DSH user data (sessions, storages, settings, presets, Caddy).
+      - dsh-data:/data/.dsh
+      # The agent's working area (its cwd and the files it edits).
+      - ./workspace:/workspace
+    # DSH runs as non-root; Caddy fronts it on the published 3081.
+
+volumes:
+  dsh-data:
+    driver: local

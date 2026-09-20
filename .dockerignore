@@ -1,0 +1,48 @@
+# DSH container build context: exclude only derived outputs and local state.
+# pnpm install --frozen-lockfile needs the FULL workspace present (vendor/*,
+# packages/*/*, native/landlock-run, apps/*, website, examples,
+# python/sdk-runtime), so only node_modules/lib/dist and VCS/local dirs are
+# excluded. Keeping node_modules/lib/dist out also forces the build stage to
+# reinstall and rebuild from source, so the image never inherits a host's
+# platform-specific artifacts (e.g. macOS Landlock, host tsbuildinfo).
+
+# Derived build outputs
+node_modules
+**/node_modules
+lib
+**/lib
+dist
+**/dist
+.dsh-build
+**/*.tsbuildinfo
+
+# VCS & tooling-local state (never required by pnpm install or pnpm run build).
+# `.git` is deliberately KEPT: build.ts reads `git rev-parse HEAD` to bake the
+# real commit hash into the client artifact record (no fake hash, no --build-arg).
+.gitignore
+.github
+.gitlab-ci.yml
+.agents
+.claude
+.oxlintrc.json
+.oxlintrc.staged.json
+.editorconfig
+.jscpd.json
+
+# Generated / scratch
+coverage
+**/coverage
+.report
+*.log
+*.tsbuildinfo
+.DS_Store
+pnpm-debug.log
+
+# Host mount points (the container provides its own workspace/data volumes)
+workspace
+data
+
+# Host-side Docker client helper dir (DOCKER_CONFIG redirect for the local
+# sandbox workaround); never shipped in the image or build context.
+.docker-config
+build.log
