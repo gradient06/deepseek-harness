@@ -48,6 +48,33 @@ interface AuthGuard {
   guard(req: IncomingMessage): AuthDecision
 }
 
+/**
+ * Wrap one custom route handler so a composed auth layer gates it before the
+ * body runs; an absent auth service keeps the unauthenticated loopback
+ * behavior. Every custom `/api/*` route this bundle registers must pass through
+ * here, or it would bypass authentication.
+ * @param ctx - plugin context to read the optional `auth` service from.
+ * @param handler - the route's own handler, run only after the guard allows.
+ * @returns a guarded handler.
+ */
+function withAuthGuard(
+  ctx: Context,
+  handler: (req: IncomingMessage, res: ServerResponse) => Promise<void>,
+): (req: IncomingMessage, res: ServerResponse) => Promise<void> {
+  return async (req, res) => {
+    const auth = ctx.get('auth') as AuthGuard | undefined
+    if (auth !== undefined) {
+      const decision = auth.guard(req)
+      if (!decision.ok) {
+        res.writeHead(decision.status, { 'content-type': 'text/plain' })
+        res.end('unauthorized')
+        return
+      }
+    }
+    await handler(req, res)
+  }
+}
+
 /** Services required before the web runtime can mount. */
 export const inject = ['webServer']
 
@@ -443,18 +470,7 @@ export function apply(ctx: Context, config: Config): void {
   ctx.effect(() => ctx.webServer.register({
     kind: 'exact',
     path: '/api/ocr',
-    handler: async (req, res) => {
-      const auth = ctx.get('auth') as AuthGuard | undefined
-      if (auth !== undefined) {
-        const decision = auth.guard(req)
-        if (!decision.ok) {
-          res.writeHead(decision.status, { 'content-type': 'text/plain' })
-          res.end('unauthorized')
-          return
-        }
-      }
-      await handleOcr(req, res)
-    },
+    handler: withAuthGuard(ctx, async (req, res) => { await handleOcr(req, res) }),
   }), 'web-app: /api/ocr (Mistral OCR)')
   // Working-directory upload endpoint for composer file drops (custom
   // evolution — the file lands in the session project, so the agent's own
@@ -462,7 +478,7 @@ export function apply(ctx: Context, config: Config): void {
   ctx.effect(() => ctx.webServer.register({
     kind: 'exact',
     path: '/api/workspace-file',
-    handler: async (req, res) => { await handleWorkspaceFile(ctx, req, res) },
+    handler: withAuthGuard(ctx, async (req, res) => { await handleWorkspaceFile(ctx, req, res) }),
   }), 'web-app: /api/workspace-file (composer file drop)')
   if (config.surfaceContext) {
     ctx.inject(['systemPrompt'], (promptCtx) => {
