@@ -5,13 +5,17 @@
  * path; missing paths return 404, traversal outside the dist root is 403,
  * unknown extensions ship as octet-stream, and non-GET/HEAD is 405. Every
  * index response runs through the webserver's index render (structured
- * injection rows, then raw taps). The dist location is workspace knowledge of
- * the composing application, so `distIndex` is typically supplied through a
- * `!!js` expression, never hardcoded by a deployment.
+ * injection rows, then raw taps). When the optional auth layer is composed,
+ * `/` and `/index.html` redirect an unauthenticated request to the public
+ * `/login` entry (a self-contained `login.html` in the dist), which is served
+ * without a session so a user can authenticate; everything else stays guarded.
+ * The dist location is workspace knowledge of the composing application, so
+ * `distIndex` is typically supplied through a `!!js` expression, never
+ * hardcoded by a deployment.
  * @module @deepseek-ai/dsh-host-frontend-static
  */
 
-import type { ServerResponse } from 'node:http'
+import type { IncomingMessage, ServerResponse } from 'node:http'
 import { readFile } from 'node:fs/promises'
 import { dirname, extname, join, normalize, resolve, sep } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
@@ -51,6 +55,33 @@ const STATIC_MISS_CODES: ReadonlySet<string | undefined> = new Set([
   'EISDIR',
   'ENOTDIR',
 ])
+
+/** Structural, local view of the optional `auth` guard decision. */
+type AuthDecision = { readonly ok: true } | { readonly ok: false; readonly status: number; readonly reason: string }
+
+/** Structural, local view of the optional `auth` service guard (read via `ctx.get`). */
+interface AuthGuard {
+  guard(req: IncomingMessage): AuthDecision
+}
+
+/**
+ * Run the optional auth layer's guard on a fallback request. An absent `auth`
+ * service means the deployment runs the current unauthenticated loopback
+ * behavior (zero regression); a present one must admit only authenticated
+ * requests before any static asset or SPA shell is served.
+ * @param ctx - the host plugin context.
+ * @param req - the inbound request.
+ * @returns `{ status }` when the guard denies it, or `undefined` to admit.
+ */
+function authDenial(ctx: Context, req: IncomingMessage): { status: number } | undefined {
+  const auth = ctx.get('auth') as AuthGuard | undefined
+  if (auth === undefined) return undefined
+  const decision = auth.guard(req)
+  return decision.ok ? undefined : { status: decision.status }
+}
+
+/** Filename of the self-contained login page served at the `/login` entry. */
+const LOGIN_PAGE = 'login.html'
 
 /**
  * Serve one GET/HEAD static request from the dist root.
@@ -97,7 +128,9 @@ export async function serveStatic(
 }
 
 /**
- * Claim the webserver fallback seat and serve the dist.
+ * Claim the webserver fallback seat and serve the dist, reserving the public
+ * `/login` entry (a self-contained `login.html`) so an unauthenticated user can
+ * authenticate without the guard refusing its only reachable page.
  * @param ctx - plugin context carrying the webServer service.
  * @param config - validated {@link Config}.
  */
@@ -116,6 +149,38 @@ export function apply(ctx: Context, config: Config): void {
     }
     /* v8 ignore next -- node:http always sets url on server requests */
     const rawPath = new URL(req.url ?? '/', 'http://x').pathname
+    // The login entry is a public page, served with or without a session: an
+    // unauthenticated user needs it to authenticate, and the page's own
+    // /api/auth/me redirects an already-authenticated user into the app. It is
+    // a self-contained document (no guarded asset dependencies), so serving it
+    // ahead of the guard does not expose the SPA shell.
+    if (rawPath === '/login' || rawPath === '/login.html') {
+      try {
+        const body = await readFile(join(distRoot, LOGIN_PAGE))
+        res.writeHead(200, { 'content-type': HTML_MIME })
+        res.end(body)
+        return
+      } catch (error) {
+        if (!STATIC_MISS_CODES.has((error as NodeJS.ErrnoException).code)) throw error
+        res.writeHead(404)
+        res.end()
+        return
+      }
+    }
+    const denied = authDenial(ctx, req)
+    if (denied !== undefined) {
+      // The SPA shell (the app root) redirects to the login entry; any other
+      // fallback asset is refused outright so the shell cannot be fetched
+      // without a session.
+      if (rawPath === '/' || rawPath === '/index.html') {
+        res.writeHead(302, { location: '/login' })
+        res.end()
+        return
+      }
+      res.writeHead(denied.status)
+      res.end('unauthorized')
+      return
+    }
     await serveStatic(decodeURIComponent(rawPath), res, distRoot, distIndex, renderIndex)
   }), 'frontend-static: fallback seat')
 }

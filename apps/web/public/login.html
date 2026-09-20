@@ -1,0 +1,232 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="icon" href="data:," />
+    <title>Connexion · DSH Local Build</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+        min-height: 100vh;
+      }
+      body {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+          "Hiragino Sans GB", "Microsoft YaHei", Roboto, Helvetica, Arial,
+          sans-serif;
+        color: #1f2329;
+        background: #f5f7fa;
+      }
+      @media (prefers-color-scheme: dark) {
+        body {
+          color: #e6e8eb;
+          background: #1a1b1e;
+        }
+      }
+      .card {
+        width: 100%;
+        max-width: 360px;
+        padding: 32px 28px;
+        border-radius: 12px;
+        background: #ffffff;
+        box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08);
+      }
+      @media (prefers-color-scheme: dark) {
+        .card {
+          background: #26272b;
+          box-shadow: 0 8px 30px rgba(0, 0, 0, 0.45);
+        }
+      }
+      h1 {
+        margin: 0 0 4px;
+        font-size: 22px;
+        font-weight: 600;
+        letter-spacing: 0.2px;
+      }
+      .sub {
+        margin: 0 0 24px;
+        font-size: 13px;
+        line-height: 1.5;
+        color: #8a919c;
+      }
+      label {
+        display: block;
+        margin-bottom: 16px;
+      }
+      label span {
+        display: block;
+        margin-bottom: 6px;
+        font-size: 13px;
+        font-weight: 500;
+      }
+      input {
+        width: 100%;
+        padding: 10px 12px;
+        font-size: 14px;
+        color: inherit;
+        background: #f7f8fa;
+        border: 1px solid #d9dce1;
+        border-radius: 8px;
+        outline: none;
+      }
+      input:focus {
+        border-color: #4c7af0;
+        box-shadow: 0 0 0 3px rgba(76, 122, 240, 0.15);
+      }
+      @media (prefers-color-scheme: dark) {
+        input {
+          background: #1f2023;
+          border-color: #3c3e44;
+        }
+      }
+      .error {
+        margin: 0 0 12px;
+        font-size: 13px;
+        line-height: 1.4;
+        color: #c0392b;
+      }
+      button {
+        width: 100%;
+        padding: 10px 12px;
+        font-size: 14px;
+        font-weight: 500;
+        color: #ffffff;
+        background: #4c7af0;
+        border: none;
+        border-radius: 8px;
+        cursor: pointer;
+      }
+      button:disabled {
+        opacity: 0.6;
+        cursor: default;
+      }
+      .status {
+        margin: 16px 0 0;
+        font-size: 13px;
+        text-align: center;
+        color: #8a919c;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="card">
+      <h1>Connexion</h1>
+      <p class="sub">Entrez votre nom d'utilisateur et votre mot de passe pour continuer avec DeepSeek Harness.</p>
+      <form id="login-form" novalidate>
+        <label>
+          <span>Nom d'utilisateur</span>
+          <input type="text" id="username" name="username" autocomplete="username" />
+        </label>
+        <label>
+          <span>Mot de passe</span>
+          <input type="password" id="password" name="password" autocomplete="current-password" />
+        </label>
+        <p class="error" id="error" hidden></p>
+        <button type="submit" id="submit">Se connecter</button>
+      </form>
+      <p class="status" id="status" hidden>Vérification de la session…</p>
+    </main>
+    <script>
+      // The login page is a public, self-contained document: the server serves it
+      // at /login even without a session, and the browser-side boot guard (the
+      // guarded /api/auth/* routes) decides whether to enter the app.
+      (function () {
+        const form = document.getElementById('login-form')
+        const username = document.getElementById('username')
+        const password = document.getElementById('password')
+        const errorEl = document.getElementById('error')
+        const statusEl = document.getElementById('status')
+        const submit = document.getElementById('submit')
+
+        function setError(text) {
+          if (text) {
+            errorEl.textContent = text
+            errorEl.hidden = false
+          } else {
+            errorEl.hidden = true
+          }
+        }
+
+        function setLoading(loading) {
+          submit.disabled = loading
+          submit.textContent = loading ? 'Connexion…' : 'Se connecter'
+        }
+
+        // On load, check whether an existing session is still valid; if so, enter
+        // the app instead of showing the form.
+        statusEl.hidden = false
+        fetch('/api/auth/me', { credentials: 'same-origin' })
+          .then(function (res) {
+            if (res.ok) {
+              window.location.replace('/')
+              return
+            }
+            statusEl.hidden = true
+          })
+          .catch(function () {
+            statusEl.hidden = true
+          })
+
+        form.addEventListener('submit', async function (event) {
+          event.preventDefault()
+          if (submit.disabled) return
+          const name = username.value.trim()
+          const pass = password.value
+          if (!name || !pass) {
+            setError('Veuillez saisir votre nom d\'utilisateur et votre mot de passe')
+            return
+          }
+          setError(null)
+          setLoading(true)
+          try {
+            const res = await fetch('/api/auth/login', {
+              method: 'POST',
+              credentials: 'same-origin',
+              headers: { 'content-type': 'application/json' },
+              body: JSON.stringify({ username: name, password: pass }),
+            })
+            if (res.ok) {
+              window.location.replace('/')
+              return
+            }
+            // The login route answers 401 for both invalid credentials and the
+            // attempt limiter (carrying retry-after); the body's error code
+            // distinguishes them so the user sees the right message.
+            let code = ''
+            try {
+              const data = await res.json()
+              code = data && data.error && data.error.code ? data.error.code : ''
+            } catch (_) {
+              code = ''
+            }
+            if (res.status === 429 || code === 'rate-limited') {
+              const retry = res.headers.get('retry-after')
+              setError(retry ? 'Trop de tentatives, réessayez dans ' + retry + ' s' : 'Trop de tentatives, réessayez plus tard')
+              return
+            }
+            if (res.status === 401) {
+              setError('Nom d\'utilisateur ou mot de passe incorrect')
+              return
+            }
+            setError('Échec de la connexion, veuillez réessayer plus tard')
+          } catch (_) {
+            setError('Impossible de contacter le serveur, veuillez réessayer plus tard')
+          } finally {
+            setLoading(false)
+          }
+        })
+      })()
+    </script>
+  </body>
+</html>

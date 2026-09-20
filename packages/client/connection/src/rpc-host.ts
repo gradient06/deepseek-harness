@@ -1,6 +1,7 @@
 /** Host registry and HTTP adapter for generic Connection RPC channels. */
 
 import { Context, Service } from '@deepseek-ai/cordis'
+import type { IncomingMessage } from 'node:http'
 import type { WebRoute } from '@deepseek-ai/dsh-host-webserver'
 import {
   clientRequestSchema,
@@ -104,6 +105,19 @@ export class HostConnectionService extends Service implements HostConnectionHand
           res.writeHead(403)
           res.end('forbidden')
           return
+        }
+        // The optional auth layer's guard must admit every DSH route; an absent
+        // service is the unauthenticated loopback behavior.
+        const auth = owner.get('auth') as
+          | { guard(req: IncomingMessage): { ok: true } | { ok: false; status: number; reason: string } }
+          | undefined
+        if (auth !== undefined) {
+          const decision = auth.guard(req)
+          if (!decision.ok) {
+            res.writeHead(decision.status, { 'content-type': 'text/plain' })
+            res.end('unauthorized')
+            return
+          }
         }
         await bridge(req, res, fetchHandler)
       },

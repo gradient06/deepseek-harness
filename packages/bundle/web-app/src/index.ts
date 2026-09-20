@@ -40,6 +40,14 @@ const SOURCE_ROOT = fileURLToPath(new URL('../../../..', import.meta.url))
 /** Runtime service that releases Web rows after bind-dependent values resolve. */
 const WEB_RUNTIME_SERVICE = 'webRuntime'
 
+/** Structural, local view of the optional `auth` guard decision. */
+type AuthDecision = { readonly ok: true } | { readonly ok: false; readonly status: number; readonly reason: string }
+
+/** Structural, local view of the optional `auth` service guard (read via `ctx.get`). */
+interface AuthGuard {
+  guard(req: IncomingMessage): AuthDecision
+}
+
 /** Services required before the web runtime can mount. */
 export const inject = ['webServer']
 
@@ -429,11 +437,24 @@ export function apply(ctx: Context, config: Config): void {
   ctx.provide(WEB_RUNTIME_SERVICE, runtime)
   ctx.plugin(FrontendStatic, { distIndex: internals.resolveDistIndex() })
   // Mistral OCR endpoint for pasted images (custom evolution — the composer
-  // POSTs the image and injects the recognized text into the prompt).
+  // POSTs the image and injects the recognized text into the prompt). Every DSH
+  // route is auth-guarded when the auth layer is composed; an absent service is
+  // the unauthenticated loopback behavior.
   ctx.effect(() => ctx.webServer.register({
     kind: 'exact',
     path: '/api/ocr',
-    handler: async (req, res) => { await handleOcr(req, res) },
+    handler: async (req, res) => {
+      const auth = ctx.get('auth') as AuthGuard | undefined
+      if (auth !== undefined) {
+        const decision = auth.guard(req)
+        if (!decision.ok) {
+          res.writeHead(decision.status, { 'content-type': 'text/plain' })
+          res.end('unauthorized')
+          return
+        }
+      }
+      await handleOcr(req, res)
+    },
   }), 'web-app: /api/ocr (Mistral OCR)')
   // Working-directory upload endpoint for composer file drops (custom
   // evolution — the file lands in the session project, so the agent's own

@@ -1,4 +1,5 @@
 /** Host HTTP bridge for browser-client RPC. */
+import type { IncomingMessage } from 'node:http'
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import type {} from '@deepseek-ai/dsh-attachment'
@@ -22,6 +23,34 @@ export type {
 export { HostConnectionService } from './rpc-host.ts'
 
 export { API_PATH, HOST_EVENTS_PATH, MUX_EVENTS_PATH } from './api-path.ts'
+
+// Re-export the trust-fence predicates so the self-registered auth routes can
+// apply the same Host/Origin defense without a separate copy.
+export { assertTrustedAuthority, isTrustedApiRequest } from './api-request-trust.ts'
+
+/** Structural, local view of the optional `auth` guard decision. */
+type AuthDecision = { readonly ok: true } | { readonly ok: false; readonly status: number; readonly reason: string }
+
+/** Structural, local view of the optional `auth` service guard (read via `ctx.get`). */
+interface AuthGuard {
+  guard(req: IncomingMessage): AuthDecision
+}
+
+/**
+ * Run the optional auth layer's guard after the trust fence has already bound
+ * the request to an authorized authority. An absent `auth` service means the
+ * deployment runs the current unauthenticated loopback behavior (zero
+ * regression); a present one must admit only authenticated requests.
+ * @param ctx - the host plugin context.
+ * @param req - the inbound request.
+ * @returns `{ status }` when the guard denies it, or `undefined` to admit.
+ */
+function authDenial(ctx: Context, req: IncomingMessage): { status: number } | undefined {
+  const auth = ctx.get('auth') as AuthGuard | undefined
+  if (auth === undefined) return undefined
+  const decision = auth.guard(req)
+  return decision.ok ? undefined : { status: decision.status }
+}
 
 /** Stable Cordis plugin name. */
 export const name = 'client-connection'
@@ -167,6 +196,12 @@ export function apply(ctx: Context, config?: ConnectionConfig): void {
         res.end('forbidden')
         return
       }
+      const denied = authDenial(ctx, req)
+      if (denied !== undefined) {
+        res.writeHead(denied.status)
+        res.end('unauthorized')
+        return
+      }
       await bridge(req, res, fetchHandler, maxRequestBodyBytes)
     },
   }
@@ -182,6 +217,10 @@ export function apply(ctx: Context, config?: ConnectionConfig): void {
         path,
         handler: (req, socket, head) => {
           if (!isTrustedApiRequest(req, trustedHosts)) {
+            rejectWebSocketUpgrade(socket)
+            return
+          }
+          if (authDenial(ctx, req) !== undefined) {
             rejectWebSocketUpgrade(socket)
             return
           }

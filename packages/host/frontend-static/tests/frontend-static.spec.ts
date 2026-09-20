@@ -7,6 +7,7 @@
  */
 
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import type { IncomingMessage } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -27,8 +28,13 @@ afterEach(async () => {
   root = undefined
 })
 
+/** Structural auth guard the fallback consults (mirrors the ctx.auth decision). */
+type TestAuthGuard = {
+  guard(req: IncomingMessage): { ok: true } | { ok: false; status: number; reason: string }
+}
+
 /** Write a dist fixture and a two-row cordis.yml, then boot it through the real Loader. */
-async function loadComposition(): Promise<Context> {
+async function loadComposition(auth?: TestAuthGuard): Promise<Context> {
   root = await mkdtemp(join(tmpdir(), 'dsh-frontend-static-'))
   const dist = join(root, 'dist')
   await mkdir(dist)
@@ -37,6 +43,7 @@ async function loadComposition(): Promise<Context> {
   await writeFile(join(dist, 'app.js'), 'export {}')
   await writeFile(join(dist, 'blob.bin'), 'BLOB')
   await writeFile(join(dist, 'manifest.webmanifest'), '{}')
+  await writeFile(join(dist, 'login.html'), '<!doctype html><title>login</title>')
   await mkdir(join(dist, 'empty'))
   const configPath = join(root, 'cordis.yml')
   await writeFile(configPath, [
@@ -55,6 +62,7 @@ async function loadComposition(): Promise<Context> {
   context.baseUrl = pathToFileURL(root).href + '/'
   await context.plugin(Loader)
   context.loader.builtins.include = Include
+  if (auth !== undefined) context.provide('auth', auth)
   const modules = new Map<string, unknown>([
     ['@deepseek-ai/dsh-host-webserver', HttpServer],
     ['@deepseek-ai/dsh-host-frontend-static', FrontendStatic],
@@ -170,5 +178,30 @@ describe('real Loader composition', () => {
     await frontendEntry!.fiber?.dispose()
     expect((await request(port, '/no/such/route')).status).toBe(404)
     expect(() => server.registerFallback(() => {})).not.toThrow()
+  })
+
+  it('applies the auth guard to the fallback seat when auth is composed', { timeout: 60_000 }, async () => {
+    const loaded = await loadComposition({ guard: () => ({ ok: false, status: 401, reason: 'no session' }) })
+    const port = loaded.webServer.port
+    // The SPA index (the app root) redirects to the login entry.
+    expect((await request(port, '/', { redirect: 'manual' })).status).toBe(302)
+    expect((await request(port, '/index.html', { redirect: 'manual' })).status).toBe(302)
+    // The login entry stays reachable without a session: it serves the public
+    // login page (the page's own /api/auth/me decides what to show).
+    expect(await request(port, '/login')).toMatchObject({ status: 200, type: 'text/html; charset=utf-8', body: '<!doctype html><title>login</title>' })
+    expect((await request(port, '/login.html')).status).toBe(200)
+    // Every other fallback asset is refused before it is served.
+    expect((await request(port, '/app.js')).status).toBe(401)
+    expect((await request(port, '/no/such/route')).status).toBe(401)
+    expect((await request(port, '/blob.bin')).status).toBe(401)
+  })
+
+  it('serves the fallback unchanged when no auth service is composed', { timeout: 60_000 }, async () => {
+    // The auth-absent deployment keeps the current unauthenticated behavior:
+    // the index renders and assets serve with no 401.
+    const loaded = await loadComposition()
+    const port = loaded.webServer.port
+    expect((await request(port, '/', { redirect: 'manual' })).status).toBe(200)
+    expect((await request(port, '/app.js')).status).toBe(200)
   })
 })

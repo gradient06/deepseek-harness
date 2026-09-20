@@ -75,7 +75,10 @@ function fakeResponse(): { response: ServerResponse; state: { status?: number; b
   return { response, state }
 }
 
-async function mounted(config?: { trustedHosts?: string[] }): Promise<{
+async function mounted(
+  config?: { trustedHosts?: string[] },
+  auth?: { guard(req: IncomingMessage): { ok: true } | { ok: false; status: number; reason: string } },
+): Promise<{
   routes: WebRoute[]
   upgrades: WebUpgradeRoute[]
   dispose: () => Promise<void>
@@ -85,6 +88,7 @@ async function mounted(config?: { trustedHosts?: string[] }): Promise<{
   const upgrades: WebUpgradeRoute[] = []
   ctx.provide('webServer', fakeHttpServer(routes, upgrades) as WebServer)
   ctx.provide('apiProxy', {} as unknown as ApiProxy)
+  if (auth !== undefined) ctx.provide('auth', auth)
   const fiber = ctx.plugin({ inject: [...inject], apply }, config)
   await fiber.await()
   return { routes, upgrades, dispose: () => fiber.dispose() }
@@ -165,6 +169,72 @@ describe('connection node half', () => {
     expect(state.status).toBe(403)
     expect(state.body).toBe('forbidden')
     await dispose()
+  })
+
+  it('admits an authenticated /api request through to the bridge', async () => {
+    const auth = { guard: () => ({ ok: true }) as const }
+    const { routes, dispose } = await mounted({}, auth)
+    const { response, state } = fakeResponse()
+    await routes[0]!.handler(fakeRequest({ host: '127.0.0.1:3080' }), response)
+    // The empty apiProxy answers 404 at the carrier level — proof the fence AND
+    // the auth guard both passed and the bridge ran.
+    expect(state.status).toBe(404)
+    await dispose()
+  })
+
+  it('answers 401 before the bridge for an unauthenticated /api request', async () => {
+    const auth = { guard: () => ({ ok: false, status: 401, reason: 'no session' }) }
+    const { routes, dispose } = await mounted({}, auth)
+    const { response, state } = fakeResponse()
+    await routes[0]!.handler(fakeRequest({ host: '127.0.0.1:3080' }), response)
+    expect(state.status).toBe(401)
+    expect(state.body).toBe('unauthorized')
+    await dispose()
+  })
+
+  it('rejects an unauthenticated WebSocket upgrade before the handshake completes', async () => {
+    const auth = { guard: () => ({ ok: false, status: 401, reason: 'no session' }) }
+    const { upgrades, dispose } = await mounted({}, auth)
+    const socket = new PassThrough()
+    const chunks: Buffer[] = []
+    socket.on('data', (chunk: Buffer) => { chunks.push(chunk) })
+    const ended = once(socket, 'end')
+    await upgrades[0]!.handler(fakeRequest({ host: '127.0.0.1:3080' }, MUX_EVENTS_PATH), socket, Buffer.alloc(0))
+    await ended
+    expect(Buffer.concat(chunks).toString()).toContain('HTTP/1.1 403 Forbidden')
+    await dispose()
+  })
+
+  it('passes an unauthenticated absent-auth deployment through to the bridge unchanged', async () => {
+    // Without a composed auth service the guard never runs: the deployment is
+    // the current unauthenticated loopback behavior.
+    const { routes, dispose } = await mounted()
+    const { response, state } = fakeResponse()
+    await routes[0]!.handler(fakeRequest({ host: '127.0.0.1:3080' }), response)
+    expect(state.status).toBe(404)
+    await dispose()
+  })
+
+  it('applies the auth guard to generic channels registered via connection.rpc', async () => {
+    const ctx = new Context()
+    const routes: WebRoute[] = []
+    ctx.provide('webServer', fakeHttpServer(routes, []) as WebServer)
+    ctx.provide('apiProxy', {} as unknown as ApiProxy)
+    ctx.provide('auth', { guard: () => ({ ok: false, status: 401, reason: 'no session' }) })
+    const fiber = ctx.plugin({ inject: [...inject], apply }, { trustedHosts: [] })
+    await fiber.await()
+    const connection = ctx.get('connection') as HostConnectionHandle
+    const remove = connection.rpc.handle('/rpc', async () => ({ ok: true, value: null }), {
+      authority: 'trusted-host',
+    })
+    const route = routes.find(candidate => candidate.path === '/rpc')!
+    const denied = fakeResponse()
+    await route.handler(fakePost({ host: '127.0.0.1:3080' }, '/rpc/anything', {
+      type: 'client-request', rpcId: 'rpc-a', method: 'read', payload: {},
+    }), denied.response)
+    expect(denied.state).toMatchObject({ status: 401, body: 'unauthorized' })
+    await remove()
+    await fiber.dispose()
   })
 
   it('pins privileged methods to loopback even for a declared trusted authority', async () => {

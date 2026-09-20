@@ -29,6 +29,8 @@ export interface WebStartupValues {
   port?: number
   /** Explicit `--trusted-host` authorities, in argument order. */
   trustedHosts: string[]
+  /** Whether the invocation opted into an all-interfaces bind (`--allow-remote`). */
+  allowRemote: boolean
 }
 
 /** The web flag family, as commander parsed it. */
@@ -37,6 +39,7 @@ interface WebOptions {
   open: boolean
   port?: string
   trustedHost?: string[]
+  allowRemote?: boolean
 }
 
 /**
@@ -51,6 +54,7 @@ function webCommand(): Command {
     .option('--host <host>', 'bind host')
     .option('--no-open', 'do not open the Web UI in the default browser')
     .option('--port <port>', 'listen port; pass 0 to let the OS pick a free one')
+    .option('--allow-remote', 'allow binding 0.0.0.0; requires the auth layer to be composed and TLS to be configured')
     .option('--trusted-host <authority...>', 'extra authority the /api browser-trust fence accepts (host or host:port; repeatable)')
     .addHelpText('after', `
 Examples:
@@ -71,8 +75,8 @@ export function apply(ctx: Context): void {
   const program = webCommand()
   program.action(() => {
     const options = program.opts<WebOptions>()
-    if (options.host === '0.0.0.0') {
-      program.error('error: --host 0.0.0.0 is intentionally not supported yet for safety: it would expose remote code execution to the network; use 127.0.0.1 instead')
+    if (options.host === '0.0.0.0' && options.allowRemote !== true) {
+      program.error('error: --host 0.0.0.0 is intentionally not supported without --allow-remote: it would expose remote code execution to the network; enable authentication and TLS, then pass --allow-remote')
     }
     if (options.port !== undefined && !/^\d+$/.test(options.port)) {
       program.error(`error: --port must be a number, got ${JSON.stringify(options.port)}`)
@@ -82,6 +86,7 @@ export function apply(ctx: Context): void {
       ...options.host !== undefined && { host: options.host },
       ...options.port !== undefined && { port: Number(options.port) },
       trustedHosts: options.trustedHost ?? [],
+      allowRemote: options.allowRemote ?? false,
     } satisfies WebStartupValues)
   })
   parseCmdline(ctx, program)
