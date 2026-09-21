@@ -170,17 +170,12 @@
         # its literals, for example: ['app.internal', ...ctx.webRuntime.trustedHosts].
         trustedHosts: !!js ctx.webRuntime.trustedHosts
 
-    # Login/logout/me self-registered routes over the /api prefix. It reads the
-    # same trusted-authority list the connection row uses, so the credential
-    # surface accepts exactly the authorities the deployment serves. Composing
-    # the auth row turns the whole Web surface into a session-required surface;
-    # absent it, the Web server keeps the unauthenticated loopback behavior.
-    - id: auth
-      name: '@deepseek-ai/dsh-auth'
-      inject: [webRuntime]
-      config:
-        trustedHosts: !!js ctx.webRuntime.trustedHosts
-
+    # The `auth` row is deliberately NOT here: this profile is the local
+    # deployment, where `dsh web` binds loopback and the trust fence is the
+    # whole gate. A deployment that becomes reachable from another machine —
+    # the Docker/Caddy image — composes the login surface as its own overlay
+    # (`deploy/auth.patch.yml`), which turns the Web surface into a
+    # session-required one (login page, guarded /api, /rpc, and WebSocket).
     - id: api-remotes
       name: '@deepseek-ai/dsh-api-remotes'
 

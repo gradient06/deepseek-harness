@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/process/2026-08-23-local-and-docker-deployments.md
+2026-08-23-local-and-docker-deployments.md: 1339c1ef4e3c867374bb974ac7d9783b191afea5
+2026-08-23-local-and-docker-deployments.zh.md: 68d4f14bb415ea72d43b2cb2a7bda1ff90c55071

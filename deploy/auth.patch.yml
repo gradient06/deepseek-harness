@@ -1,0 +1,29 @@
+# Docker deployment overlay: compose the login surface.
+#
+# The shipped web profile (packages/bundle/web-app/cordis.patch.yml) deliberately
+# omits the `auth` row, so a workstation running `dsh web` keeps the
+# unauthenticated loopback behavior. The container composes this overlay
+# (`dsh web --patch /app/deploy/auth.patch.yml`, see Dockerfile) because Caddy
+# publishes it on the host network: composing auth makes the whole Web surface
+# session-required — `/` redirects to the login page, and every `/api`, `/rpc`,
+# and WebSocket request needs the session cookie.
+#
+# Before the first login, create an account in the container:
+#
+#   docker compose exec -it dsh node deploy/auth-add-user.mjs <username>
+#
+# Sessions and users live under $DSH_HOME (/data/.dsh in the image, the
+# `dsh-data` volume in compose), so they survive a container recreation.
+- insert:
+    - id: auth
+      name: '@deepseek-ai/dsh-auth'
+      inject: [webRuntime]
+      config:
+        # The same authority list the connection row uses. Caddy forwards the
+        # original Host header, so the credential routes accept exactly the
+        # authorities this deployment serves, and nothing else.
+        trustedHosts: !!js ctx.webRuntime.trustedHosts
+        # Published over plain HTTP in the local/dev compose file. A public
+        # deployment terminates TLS in Caddy and sets this to true so the
+        # session cookie never travels in the clear.
+        cookieSecure: false

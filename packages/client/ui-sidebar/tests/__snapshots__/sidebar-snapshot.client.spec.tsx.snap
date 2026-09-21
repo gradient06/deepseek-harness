@@ -217,7 +217,7 @@ exports[`sidebar shell snapshots > renders the expanded column (wordmark, capsul
         class="version"
         title="Interface custom (fork gradient06)"
       >
-        interface v0.1.1-rc.2-g06.4
+        interface v0.1.1-rc.2-g06.5
       </div>
     </div>
   </div>
@@ -349,7 +349,7 @@ exports[`sidebar shell snapshots > renders the expanded column in the default lo
         class="version"
         title="Interface custom (fork gradient06)"
       >
-        interface v0.1.1-rc.2-g06.4
+        interface v0.1.1-rc.2-g06.5
       </div>
     </div>
   </div>

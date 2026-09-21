@@ -79,10 +79,25 @@ USER dsh
 # loopback:8081, and Caddy fronts 0.0.0.0:3081.
 EXPOSE 3081
 
-# Healthcheck: Caddy answers 200 at "/" (unauth still 200 in Phase 0).
+# Healthcheck: the login page answers 200 without a session, so it proves the
+# whole chain (Caddy -> DSH -> dist) is up even while every other path is
+# guarded. The previous check on "/" now returns the 302 to /login.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
-  CMD curl -fsS http://127.0.0.1:3081/ >/dev/null || exit 1
+  CMD curl -fsS http://127.0.0.1:3081/login >/dev/null || exit 1
 
 # tini reaps DSH's orphaned backgrounded children; Caddy is the foreground PID.
+#
+# `--patch deploy/auth.patch.yml` composes the login surface: Caddy publishes
+# this container on the host network, so the Web surface must be
+# session-required. That overlay is the ONLY difference from the local
+# deployment (`pnpm dsh web` on a workstation, which composes no auth row and
+# keeps the unauthenticated loopback behavior). Create the first account with
+# the bundled helper before logging in:
+#
+#   docker compose exec -it dsh node deploy/auth-add-user.mjs <username>
+#
+# `--patch` must precede the web app's own flags: the `web` alias passes
+# unknown options through to the app's parser once one appears, and the app
+# does not know `--patch`.
 ENTRYPOINT ["/usr/bin/tini", "--"]
-CMD ["/bin/sh", "-c", "node apps/cli/lib/bin.js web --host 127.0.0.1 --port 8081 --no-open & exec caddy run --config /app/Caddyfile --adapter caddyfile"]
+CMD ["/bin/sh", "-c", "node apps/cli/lib/bin.js web --patch /app/deploy/auth.patch.yml --host 127.0.0.1 --port 8081 --no-open & exec caddy run --config /app/Caddyfile --adapter caddyfile"]

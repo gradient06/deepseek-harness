@@ -1,10 +1,33 @@
 # Local dev/test compose for the DSH web container (Phase 0).
 #
-# DSH binds only 127.0.0.1 (the repo rejects `--host 0.0.0.0` until an
-# authentication layer exists), so the container runs Caddy on 0.0.0.0:3081 and
+# TWO DEPLOYMENTS, ONE CODEBASE:
+#   • local  — `pnpm dsh web` on the workstation: loopback only, no login. The
+#              web profile composes no auth row, so the trust fence is the
+#              whole gate and the GUI opens straight onto the conversation.
+#   • docker — this file: the container publishes Caddy on the host network, so
+#              it composes `deploy/auth.patch.yml` (see Dockerfile) and the
+#              whole Web surface becomes session-required: "/" redirects to the
+#              login page, every /api, /rpc, and WebSocket request needs the
+#              session cookie.
+#
+# FIRST LOGIN (once per data volume) — accounts live in the `dsh-data` volume,
+# and the auth service reads the user store AT BOOT, so create the account
+# before the server starts (or restart the container afterwards):
+#
+#   docker compose run --rm -e DSH_AUTH_PASSWORD='<mot de passe>' dsh \
+#     node deploy/auth-add-user.mjs <username> --role admin
+#   docker compose up -d --build
+#   open http://localhost:3081
+#
+# An account added while the server is already running becomes visible after
+# `docker compose restart dsh`. Change a password the same way with --force.
+#
+# DSH binds only 127.0.0.1, so the container runs Caddy on 0.0.0.0:3081 and
 # forwards to DSH's loopback 127.0.0.1:8081. The published port is 3081
-# (user-chosen): open http://localhost:3081 from the host. This is also the
-# layout a Caddy sidecar (Phase 4) will front on a VPS with TLS.
+# (user-chosen). This is also the layout a Caddy sidecar (Phase 4) will front
+# on a VPS with TLS; a public hostname then also needs `--trusted-host
+# <authority>` on the DSH command (the trust fence only accepts loopback
+# authorities otherwise) and `cookieSecure: true` in the overlay.
 #
 # Secrets: DEEPSEEK_API_KEY is read from the host environment (or a .env file
 # next to this file, which compose loads automatically). Never hardcode it.
